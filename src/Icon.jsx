@@ -22,6 +22,10 @@ const P = {
   save: <path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>,
   home: <path d="M3 11 12 3l9 8M5 9.5V20h5v-6h4v6h5V9.5"/>,
   more: <><circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/></>,
+  lock: <><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></>,
+  edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+  move: <><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></>,
+  dup: <><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></>,
   check: <path d="m5 12 5 5 9-10"/>,
 }
 export default function Icon({ n, size = 20, ...p }) {

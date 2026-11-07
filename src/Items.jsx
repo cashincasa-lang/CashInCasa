@@ -1,4 +1,4 @@
-import {useEffect,useState,useCallback} from 'react'
+import {useEffect,useState,useCallback,useRef} from 'react'
 import {supabase} from './supabase'
 import Icon from './Icon'
 import Sheet from './Sheet'
@@ -29,8 +29,14 @@ let pending=(()=>{
 const empty={type:'link',url:'',title:'',content:'',tags:'',thumb:'',platform:''}
 const TILE={link:'lilac',note:'sand',prompt:'mint',idea:'rose'}
 const host=u=>{try{return new URL(u).hostname.replace('www.','')}catch{return ''}}
-export default function Items({user,folder,role,q,addTick}){
+const getPrev=async(url,title)=>{
+ const d=detect(url);let ti=title,th=d.thumb||''
+ try{const j=await (await fetch('https://noembed.com/embed?url='+encodeURIComponent(url))).json();ti=ti||j.title||'';th=th||j.thumbnail_url||''}catch{}
+ return {title:ti,thumb:th,platform:d.platform}
+}
+export default function Items({user,folder,role,q,addTick,dests,allowNone=true}){
  const [adding,setAdding]=useState(()=>!!pending||addTick>0)
+ const [editId,setEditId]=useState(null),[picker,setPicker]=useState(null),orig=useRef(null)
  const [items,setItems]=useState([]),[open,setOpen]=useState(null),[menu,setMenu]=useState(null),[play,setPlay]=useState(false),[f,setF]=useState(()=>{const p=pending;pending=null;return p?{...empty,...p}:empty})
  const canEdit=!folder||role!=='viewer'
  const load=useCallback(async()=>{
@@ -43,19 +49,20 @@ export default function Items({user,folder,role,q,addTick}){
  const set=k=>e=>setF({...f,[k]:e.target.value})
  const preview=async()=>{
   if(f.type!=='link'||!f.url)return
-  const d=detect(f.url);let title=f.title,thumb=d.thumb||''
-  try{const j=await (await fetch('https://noembed.com/embed?url='+encodeURIComponent(f.url))).json();title=title||j.title||'';thumb=thumb||j.thumbnail_url||''}catch{}
-  setF(x=>({...x,title,thumb,platform:d.platform}))
+  const r=await getPrev(f.url,f.title)
+  setF(x=>({...x,title:r.title,thumb:r.thumb,platform:r.platform}))
  }
  useEffect(()=>{if(f.url)preview()},[])
  const save=async e=>{
   e.preventDefault()
-  const d=f.type==='link'?detect(f.url):{}
-  const row={type:f.type,title:f.title||null,url:f.url||null,content:f.content||null,platform:f.platform||d.platform||null,
-   thumbnail:f.thumb||d.thumb||null,tags:f.tags.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean),folder_id:folder?.id||null}
-  const {error}=await supabase.from('items').insert(row)
+  const link=f.type==='link',d=link?detect(f.url):{}
+  let t=f.thumb,p=f.platform,ti=f.title
+  if(link&&editId&&f.url!==orig.current?.url){const r=await getPrev(f.url,f.title);t=r.thumb;p=r.platform;ti=r.title}
+  const row={type:f.type,title:ti||null,url:link?(f.url||null):null,content:f.content||null,platform:link?(p||d.platform||null):null,
+   thumbnail:link?(t||d.thumb||null):null,tags:f.tags.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean)}
+  const {error}=editId?await supabase.from('items').update(row).eq('id',editId):await supabase.from('items').insert({...row,folder_id:folder?.id||null})
   if(error)return alert(error.message)
-  setF({...f,url:'',title:'',content:'',tags:'',thumb:'',platform:''});setAdding(false);load()
+  setF(editId?empty:{...empty,type:f.type});setAdding(false);setEditId(null);load()
  }
  const closeAll=()=>{setOpen(null);setMenu(null);setPlay(false)}
  const del=async i=>{if(confirm('Excluir este item?')){await supabase.from('items').delete().eq('id',i.id);closeAll();load()}}
@@ -64,8 +71,35 @@ export default function Items({user,folder,role,q,addTick}){
   const {error}=await supabase.from('items').insert({...rest,copied_from:id,folder_id:null})
   alert(error?error.message:'Salvo na sua biblioteca.')
  }
+ const canEditItem=i=>i.owner_id===user.id||role==='owner'||role==='editor'
+ const closeForm=()=>{setAdding(false);if(editId){setEditId(null);setF(empty)}}
+ const openEdit=i=>{closeAll();orig.current=i;setEditId(i.id);setF({type:i.type,url:i.url||'',title:i.title||'',content:i.content||'',tags:(i.tags||[]).join(', '),thumb:i.thumbnail||'',platform:i.platform||''});setAdding(true)}
+ const optsFor=(i,mode)=>[...(allowNone&&i.folder_id&&(mode==='copy'||i.owner_id===user.id)?[{id:null,name:'Sem pasta (Todos os itens)'}]:[]),...(dests||[]).filter(x=>x.id!==i.folder_id)]
+ const copyTo=async(i,dest,dup)=>{
+  const {id,owner_id,created_at,folder_id,...rest}=i
+  const row={...rest,folder_id:dest,copied_from:id}
+  if(dup&&row.title)row.title=row.title+' (cópia)'
+  const {error}=await supabase.from('items').insert(row)
+  return error
+ }
+ const duplicate=async i=>{const e=await copyTo(i,i.folder_id,true);if(e)alert(e.message);else load()}
+ const pickDest=async d=>{
+  const {item,mode}=picker;setPicker(null)
+  if(mode==='move'){
+   const {error}=await supabase.from('items').update({folder_id:d}).eq('id',item.id)
+   if(error)return alert(error.message)
+   closeAll();load()
+  }else{
+   const e=await copyTo(item,d,false)
+   alert(e?e.message:'Cópia criada.');load()
+  }
+ }
  const actions=i=>[
   i.url&&{k:'open',icon:'out',label:'Abrir original',href:i.url},
+  canEditItem(i)&&{k:'edit',icon:'edit',label:'Editar',run:()=>openEdit(i)},
+  canEdit&&{k:'dup',icon:'dup',label:'Duplicar',run:()=>duplicate(i)},
+  canEditItem(i)&&optsFor(i,'move').length>0&&{k:'move',icon:'move',label:'Mover para…',run:()=>setPicker({item:i,mode:'move'})},
+  optsFor(i,'copy').length>0&&{k:'cp',icon:'folder',label:'Copiar para…',run:()=>setPicker({item:i,mode:'copy'})},
   i.content&&{k:'copy',icon:'copy',label:'Copiar texto',run:()=>navigator.clipboard.writeText(i.content)},
   i.owner_id!==user.id&&{k:'keep',icon:'save',label:'Salvar na minha biblioteca',run:()=>keep(i)},
   (i.owner_id===user.id||role==='owner')&&{k:'del',icon:'trash',label:'Excluir',danger:true,run:()=>del(i)}
@@ -114,9 +148,14 @@ export default function Items({user,folder,role,q,addTick}){
    </div>
   </Sheet>}
 
-  {canEdit&&adding&&<Sheet onClose={()=>setAdding(false)} label="Novo item">
+  {picker&&<Sheet onClose={()=>setPicker(null)} label={picker.mode==='move'?'Mover item':'Copiar item'}>
+   <div className="sheet-head"><strong>{picker.mode==='move'?'Mover para…':'Copiar para…'}</strong><button type="button" className="icon-btn" aria-label="Fechar" onClick={()=>setPicker(null)}><Icon n="close"/></button></div>
+   {optsFor(picker.item,picker.mode).map(o=><button key={o.id||'none'} className="mi" onClick={()=>pickDest(o.id)}><Icon n={o.id?'folder':'inbox'}/>{o.name}</button>)}
+  </Sheet>}
+
+  {(canEdit||editId)&&adding&&<Sheet onClose={closeForm} label={editId?'Editar item':'Novo item'}>
    <form className="fgrid" onSubmit={save}>
-    <div className="sheet-head"><strong>Novo item</strong><button type="button" className="icon-btn" aria-label="Fechar" onClick={()=>setAdding(false)}><Icon n="close"/></button></div>
+    <div className="sheet-head"><strong>{editId?'Editar item':'Novo item'}</strong><button type="button" className="icon-btn" aria-label="Fechar" onClick={closeForm}><Icon n="close"/></button></div>
     <div className="frow">
      <select className="input" aria-label="Tipo" value={f.type} onChange={set('type')}>{Object.entries(KIND).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
      {f.type==='link'?<input className="input" required type="url" inputMode="url" placeholder="Cole o link (YouTube, TikTok, Instagram, Kwai…)" value={f.url} onChange={set('url')} onBlur={preview}/>:<input className="input" placeholder="Título" value={f.title} onChange={set('title')}/>}
@@ -124,7 +163,7 @@ export default function Items({user,folder,role,q,addTick}){
     {f.type==='link'&&<input className="input" placeholder="Título (opcional)" value={f.title} onChange={set('title')}/>}
     <textarea className="input" required={f.type!=='link'} rows={f.type==='link'?2:5} placeholder={f.type==='link'?'Anotação sobre este link (opcional)':f.type==='prompt'?'Escreva o prompt':'Escreva aqui'} value={f.content} onChange={set('content')}/>
     <input className="input" placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/>
-    <button className="btn btn--primary btn--lg">Salvar item</button>
+    <button className="btn btn--primary btn--lg">{editId?'Salvar alterações':'Salvar item'}</button>
    </form>
   </Sheet>}
  </>

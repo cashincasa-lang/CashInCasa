@@ -24,8 +24,11 @@ let pending=(()=>{
 })()
 const empty={type:'link',url:'',title:'',content:'',tags:'',thumb:'',platform:''}
 export default function Items({user,folder,role}){
+ const [adding,setAdding]=useState(()=>!!pending)
  const [items,setItems]=useState([]),[q,setQ]=useState(''),[open,setOpen]=useState(null),[f,setF]=useState(()=>{const p=pending;pending=null;return p?{...empty,...p}:empty})
  const canEdit=!folder||role!=='viewer'
+ const [mode,setMode]=useState(()=>{try{return localStorage.getItem('vm')||(matchMedia('(max-width:860px)').matches?'list':'grid')}catch{return 'grid'}})
+ const pick=m=>{setMode(m);try{localStorage.setItem('vm',m)}catch{}}
  const load=useCallback(async()=>{
   let qy=supabase.from('items').select('*').order('created_at',{ascending:false})
   qy=folder?qy.eq('folder_id',folder.id):qy.eq('owner_id',user.id)
@@ -47,7 +50,7 @@ export default function Items({user,folder,role}){
    thumbnail:f.thumb||d.thumb||null,tags:f.tags.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean),folder_id:folder?.id||null}
   const {error}=await supabase.from('items').insert(row)
   if(error)return alert(error.message)
-  setF({...f,url:'',title:'',content:'',tags:'',thumb:'',platform:''});load()
+  setF({...f,url:'',title:'',content:'',tags:'',thumb:'',platform:''});setAdding(false);load()
  }
  const del=async i=>{if(confirm('Excluir este item?')){await supabase.from('items').delete().eq('id',i.id);load()}}
  const keep=async i=>{
@@ -57,7 +60,10 @@ export default function Items({user,folder,role}){
  }
  const shown=items.filter(i=>[i.title,i.content,i.url,...i.tags].join(' ').toLowerCase().includes(q.toLowerCase()))
  return <>
-  {canEdit&&<form className="card" onSubmit={save}>
+  {canEdit&&<button className="fab" aria-label="Novo item" onClick={()=>setAdding(true)}>+</button>}
+  {canEdit&&adding&&<div className="sheet-scrim" onClick={()=>setAdding(false)}/>}
+  {canEdit&&<form className={'card addform'+(adding?' open':'')} onSubmit={save}>
+   <div className="sheet-head"><strong>Novo item</strong><button type="button" className="btn btn--ghost btn--sm" onClick={()=>setAdding(false)}>Fechar</button></div>
    <div className="row">
     <select className="input" value={f.type} onChange={set('type')} style={{maxWidth:160}}>{Object.entries(KIND).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
     {f.type==='link'&&<input className="input" required placeholder="Cole o link (YouTube, TikTok, Instagram, Kwai ou site)" value={f.url} onChange={set('url')} onBlur={preview} style={{flex:3}}/>}
@@ -67,12 +73,12 @@ export default function Items({user,folder,role}){
    {f.type==='link'&&<div className="row"><textarea className="input" rows={2} placeholder="Anotação sobre este link (opcional)" value={f.content} onChange={set('content')}/></div>}
    <div className="row"><input className="input" placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/><button className="btn btn--primary btn--sm" style={{flex:'0 0 auto'}}>Salvar</button></div>
   </form>}
-  <div className="row"><input className="input" placeholder="Buscar por título, texto ou tag" value={q} onChange={e=>setQ(e.target.value)}/></div>
+  <div className="toolbar"><input className="input" placeholder="Buscar por título, texto ou tag" value={q} onChange={e=>setQ(e.target.value)}/><div className="segmented" role="group" aria-label="Visualização"><button type="button" aria-pressed={mode==='grid'} onClick={()=>pick('grid')}>Galeria</button><button type="button" aria-pressed={mode==='list'} onClick={()=>pick('list')}>Lista</button></div></div>
   {shown.length===0&&<p className="empty">{items.length?'Nada encontrado para essa busca.':'Nenhum item ainda. Cole um link ou escreva uma nota acima.'}</p>}
-  <div className="grid">{shown.map(i=>{
+  <div className={'grid '+(mode==='list'?'list':'')}>{shown.map(i=>{
    const d=i.url?detect(i.url):{},mine=i.owner_id===user.id
    return <div className="card item" key={i.id}>
-    {open===i.id&&d.embed?<iframe src={d.embed} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title={i.title||'vídeo'}/>:i.thumbnail&&<img src={i.thumbnail} alt="" loading="lazy"/>}
+    {open===i.id&&d.embed?<iframe className={d.platform==='youtube'?'wide':''} src={d.embed} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title={i.title||'vídeo'}/>:i.thumbnail&&<img src={i.thumbnail} alt="" loading="lazy"/>}
     <div className="in">
      <span className="kind">{KIND[i.type]}{i.platform?` · ${i.platform}`:''}</span>
      {i.title&&<h3 className="t-h3">{i.title}</h3>}

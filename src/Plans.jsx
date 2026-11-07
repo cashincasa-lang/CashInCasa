@@ -26,7 +26,7 @@ export default function Plans({user}){
  const done=tasks.filter(k=>k.status==='done').length
  return <>
   <div className="head"><h1 className="page-title">Planos de ação</h1><button className="btn btn--primary btn--sm" onClick={addPlan}>Novo plano</button></div>
-  <div className="row">{plans.map(p=><button key={p.id} className={'btn btn--sm '+(cur?.id===p.id?'btn--primary':'btn--ghost')} onClick={()=>setCur(p)} style={{flex:'0 0 auto'}}>{p.title}</button>)}</div>
+  <div className="row plans-row">{plans.map(p=><button key={p.id} className={'btn btn--sm '+(cur?.id===p.id?'btn--primary':'btn--ghost')} onClick={()=>setCur(p)} style={{flex:'0 0 auto'}}>{p.title}</button>)}</div>
   {!plans.length&&<p className="empty">Crie um plano para transformar seus links e ideias em tarefas com prazo.</p>}
   {cur&&<div className="card">
    <div className="head"><h2 className="t-title">{cur.title}</h2><span className="kind">{done} de {tasks.length} tarefas feitas <button className="link danger" onClick={delPlan}>Excluir plano</button></span></div>

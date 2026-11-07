@@ -26,8 +26,6 @@ const empty={type:'link',url:'',title:'',content:'',tags:'',thumb:'',platform:''
 export default function Items({user,folder,role}){
  const [items,setItems]=useState([]),[q,setQ]=useState(''),[open,setOpen]=useState(null),[f,setF]=useState(()=>{const p=pending;pending=null;return p?{...empty,...p}:empty})
  const canEdit=!folder||role!=='viewer'
- const [mode,setMode]=useState(()=>{try{return localStorage.getItem('vm')||'grid'}catch{return 'grid'}})
- const pick=m=>{setMode(m);try{localStorage.setItem('vm',m)}catch{}}
  const load=useCallback(async()=>{
   let qy=supabase.from('items').select('*').order('created_at',{ascending:false})
   qy=folder?qy.eq('folder_id',folder.id):qy.eq('owner_id',user.id)
@@ -69,9 +67,9 @@ export default function Items({user,folder,role}){
    {f.type==='link'&&<div className="row"><textarea className="input" rows={2} placeholder="Anotação sobre este link (opcional)" value={f.content} onChange={set('content')}/></div>}
    <div className="row"><input className="input" placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/><button className="btn btn--primary btn--sm" style={{flex:'0 0 auto'}}>Salvar</button></div>
   </form>}
-  <div className="toolbar"><input className="input" placeholder="Buscar por título, texto ou tag" value={q} onChange={e=>setQ(e.target.value)}/><div className="segmented" role="group" aria-label="Visualização"><button type="button" aria-pressed={mode==='grid'} onClick={()=>pick('grid')}>Galeria</button><button type="button" aria-pressed={mode==='list'} onClick={()=>pick('list')}>Lista</button></div></div>
+  <div className="row"><input className="input" placeholder="Buscar por título, texto ou tag" value={q} onChange={e=>setQ(e.target.value)}/></div>
   {shown.length===0&&<p className="empty">{items.length?'Nada encontrado para essa busca.':'Nenhum item ainda. Cole um link ou escreva uma nota acima.'}</p>}
-  <div className={'grid '+(mode==='list'?'list':'')}>{shown.map(i=>{
+  <div className="grid">{shown.map(i=>{
    const d=i.url?detect(i.url):{},mine=i.owner_id===user.id
    return <div className="card item" key={i.id}>
     {open===i.id&&d.embed?<iframe src={d.embed} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title={i.title||'vídeo'}/>:i.thumbnail&&<img src={i.thumbnail} alt="" loading="lazy"/>}

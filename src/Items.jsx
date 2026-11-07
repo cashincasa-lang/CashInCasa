@@ -57,34 +57,34 @@ export default function Items({user,folder,role}){
  }
  const shown=items.filter(i=>[i.title,i.content,i.url,...i.tags].join(' ').toLowerCase().includes(q.toLowerCase()))
  return <>
-  {canEdit&&<form className="box" onSubmit={save}>
+  {canEdit&&<form className="card" onSubmit={save}>
    <div className="row">
-    <select value={f.type} onChange={set('type')} style={{maxWidth:160}}>{Object.entries(KIND).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
-    {f.type==='link'&&<input required placeholder="Cole o link (YouTube, TikTok, Instagram, Kwai ou site)" value={f.url} onChange={set('url')} onBlur={preview} style={{flex:3}}/>}
-    <input placeholder="Título" value={f.title} onChange={set('title')} style={{flex:2}}/>
+    <select className="input" value={f.type} onChange={set('type')} style={{maxWidth:160}}>{Object.entries(KIND).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+    {f.type==='link'&&<input className="input" required placeholder="Cole o link (YouTube, TikTok, Instagram, Kwai ou site)" value={f.url} onChange={set('url')} onBlur={preview} style={{flex:3}}/>}
+    <input className="input" placeholder="Título" value={f.title} onChange={set('title')} style={{flex:2}}/>
    </div>
-   {f.type!=='link'&&<div className="row"><textarea required rows={4} placeholder={f.type==='prompt'?'Escreva o prompt':'Escreva aqui'} value={f.content} onChange={set('content')}/></div>}
-   {f.type==='link'&&<div className="row"><textarea rows={2} placeholder="Anotação sobre este link (opcional)" value={f.content} onChange={set('content')}/></div>}
-   <div className="row"><input placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/><button className="pri" style={{flex:'0 0 auto'}}>Salvar</button></div>
+   {f.type!=='link'&&<div className="row"><textarea className="input" required rows={4} placeholder={f.type==='prompt'?'Escreva o prompt':'Escreva aqui'} value={f.content} onChange={set('content')}/></div>}
+   {f.type==='link'&&<div className="row"><textarea className="input" rows={2} placeholder="Anotação sobre este link (opcional)" value={f.content} onChange={set('content')}/></div>}
+   <div className="row"><input className="input" placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/><button className="btn btn--primary btn--sm" style={{flex:'0 0 auto'}}>Salvar</button></div>
   </form>}
-  <div className="row"><input placeholder="Buscar por título, texto ou tag" value={q} onChange={e=>setQ(e.target.value)}/></div>
+  <div className="row"><input className="input" placeholder="Buscar por título, texto ou tag" value={q} onChange={e=>setQ(e.target.value)}/></div>
   {shown.length===0&&<p className="empty">{items.length?'Nada encontrado para essa busca.':'Nenhum item ainda. Cole um link ou escreva uma nota acima.'}</p>}
   <div className="grid">{shown.map(i=>{
    const d=i.url?detect(i.url):{},mine=i.owner_id===user.id
-   return <div className="card" key={i.id}>
+   return <div className="card item" key={i.id}>
     {open===i.id&&d.embed?<iframe src={d.embed} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title={i.title||'vídeo'}/>:i.thumbnail&&<img src={i.thumbnail} alt="" loading="lazy"/>}
     <div className="in">
      <span className="kind">{KIND[i.type]}{i.platform?` · ${i.platform}`:''}</span>
-     {i.title&&<h3 style={{fontSize:'1.05rem'}}>{i.title}</h3>}
+     {i.title&&<h3 className="t-h3">{i.title}</h3>}
      {i.content&&<pre>{i.content}</pre>}
      {open===i.id&&i.url&&!d.embed&&<span className="kind">Esta plataforma não permite player dentro do app. Use “Abrir original”.</span>}
-     <div>{i.tags.map(t=><span className="tag" key={t}>{t}</span>)}</div>
+     <div>{i.tags.map(t=><span className="badge badge--success" key={t}>{t}</span>)}</div>
      <div className="acts">
-      {d.embed&&<button onClick={()=>setOpen(open===i.id?null:i.id)}>{open===i.id?'Fechar vídeo':'Assistir aqui'}</button>}
-      {i.url&&<a href={i.url} target="_blank" rel="noreferrer"><button>Abrir original</button></a>}
-      {(i.type==='prompt'||i.type==='note'||i.type==='idea')&&<button onClick={()=>navigator.clipboard.writeText(i.content||'')}>Copiar</button>}
-      {!mine&&<button onClick={()=>keep(i)}>Salvar na minha biblioteca</button>}
-      {(mine||role==='owner')&&<button className="danger" onClick={()=>del(i)}>Excluir</button>}
+      {d.embed&&<button className="btn btn--ghost btn--sm" onClick={()=>setOpen(open===i.id?null:i.id)}>{open===i.id?'Fechar vídeo':'Assistir aqui'}</button>}
+      {i.url&&<a href={i.url} target="_blank" rel="noreferrer"><button className="btn btn--ghost btn--sm">Abrir original</button></a>}
+      {(i.type==='prompt'||i.type==='note'||i.type==='idea')&&<button className="btn btn--ghost btn--sm" onClick={()=>navigator.clipboard.writeText(i.content||'')}>Copiar</button>}
+      {!mine&&<button className="btn btn--ghost btn--sm" onClick={()=>keep(i)}>Salvar na minha biblioteca</button>}
+      {(mine||role==='owner')&&<button className="btn btn--ghost btn--sm danger" onClick={()=>del(i)}>Excluir</button>}
      </div>
     </div>
    </div>})}</div>

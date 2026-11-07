@@ -25,22 +25,22 @@ export default function Plans({user}){
  const attach=async(k,item)=>{if(!item)return;await supabase.from('task_items').insert({task_id:k.id,item_id:item});loadT(cur.id)}
  const done=tasks.filter(k=>k.status==='done').length
  return <>
-  <div className="head"><h1>Planos de ação</h1><button className="pri" onClick={addPlan}>Novo plano</button></div>
-  <div className="row">{plans.map(p=><button key={p.id} className={cur?.id===p.id?'pri':''} onClick={()=>setCur(p)} style={{flex:'0 0 auto'}}>{p.title}</button>)}</div>
+  <div className="head"><h1 className="page-title">Planos de ação</h1><button className="btn btn--primary btn--sm" onClick={addPlan}>Novo plano</button></div>
+  <div className="row">{plans.map(p=><button key={p.id} className={'btn btn--sm '+(cur?.id===p.id?'btn--primary':'btn--ghost')} onClick={()=>setCur(p)} style={{flex:'0 0 auto'}}>{p.title}</button>)}</div>
   {!plans.length&&<p className="empty">Crie um plano para transformar seus links e ideias em tarefas com prazo.</p>}
-  {cur&&<div className="box">
-   <div className="head"><h2>{cur.title}</h2><span className="kind">{done} de {tasks.length} tarefas feitas <button className="link danger" onClick={delPlan}>Excluir plano</button></span></div>
+  {cur&&<div className="card">
+   <div className="head"><h2 className="t-title">{cur.title}</h2><span className="kind">{done} de {tasks.length} tarefas feitas <button className="link danger" onClick={delPlan}>Excluir plano</button></span></div>
    <form className="row" onSubmit={addTask}>
-    <input required placeholder="Nova tarefa" value={t} onChange={e=>setT(e.target.value)} style={{flex:3}}/>
-    <input type="date" value={due} onChange={e=>setDue(e.target.value)}/>
-    <button className="pri" style={{flex:'0 0 auto'}}>Adicionar</button>
+    <input className="input" required placeholder="Nova tarefa" value={t} onChange={e=>setT(e.target.value)} style={{flex:3}}/>
+    <input className="input" type="date" value={due} onChange={e=>setDue(e.target.value)}/>
+    <button className="btn btn--primary btn--sm" style={{flex:'0 0 auto'}}>Adicionar</button>
    </form>
    {tasks.map(k=><div key={k.id}>
     <div className={'task '+k.status}>
-     <button className={'st '+k.status} onClick={()=>cycle(k)} title="Mudar status">{LABEL[k.status]}</button>
+     <button className={'badge st '+k.status} onClick={()=>cycle(k)} title="Mudar status">{LABEL[k.status]}</button>
      <span className="t">{k.title}{k.due_date&&<small className="kind"> · prazo {new Date(k.due_date+'T00:00').toLocaleDateString('pt-BR')}</small>}</span>
-     <select style={{width:150}} value="" onChange={e=>attach(k,e.target.value)}><option value="">Vincular link</option>{links.map(l=><option key={l.id} value={l.id}>{(l.title||l.url).slice(0,40)}</option>)}</select>
-     <button className="danger" onClick={()=>delTask(k)}>Excluir</button>
+     <select className="input" style={{width:150}} value="" onChange={e=>attach(k,e.target.value)}><option value="">Vincular link</option>{links.map(l=><option key={l.id} value={l.id}>{(l.title||l.url).slice(0,40)}</option>)}</select>
+     <button className="btn btn--ghost btn--sm danger" onClick={()=>delTask(k)}>Excluir</button>
     </div>
     {k.task_items?.map(x=><div key={x.item_id} className="kind" style={{paddingLeft:'6rem'}}><a href={x.items?.url} target="_blank" rel="noreferrer">{x.items?.title||x.items?.url}</a></div>)}
    </div>)}

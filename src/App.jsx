@@ -27,26 +27,35 @@ export default function App(){
   await supabase.from('folders').delete().eq('id',f.id);setView('all');load()
  }
  const cur=folders.find(f=>f.id===view)
- const btn=f=><button key={f.id} className={view===f.id?'on':''} onClick={()=>setView(f.id)}>{f.name}{f.my_role!=='owner'&&<small> · {f.my_role==='editor'?'editor':'leitor'}</small>}</button>
- return <div className="app">
-  <aside>
+ const cp=v=>view===v?'page':undefined
+ const btn=f=><button key={f.id} aria-current={cp(f.id)} onClick={()=>setView(f.id)}><span>{f.name}</span>{f.my_role!=='owner'&&<span className="role">{f.my_role==='editor'?'editor':'leitor'}</span>}</button>
+ const go=v=>e=>{e.preventDefault();setView(v)}
+ return <div className="screen">
+  <header className="topbar">
    <div className="brand">cash<b>In</b>casa</div>
-   <button className={view==='all'?'on':''} onClick={()=>setView('all')}>Todos os meus itens</button>
-   <button className={view==='plans'?'on':''} onClick={()=>setView('plans')}>Planos de ação</button>
-   <h4>Minhas pastas</h4>{folders.filter(f=>f.my_role==='owner').map(btn)}
-   <button onClick={addFolder}>+ Nova pasta</button>
-   {folders.some(f=>f.my_role!=='owner')&&<><h4>Compartilhadas comigo</h4>{folders.filter(f=>f.my_role!=='owner').map(btn)}</>}
-   <div className="user">{user.email}<br/><button onClick={()=>supabase.auth.signOut()}>Sair</button></div>
-  </aside>
-  <main>
-   {view==='plans'?<Plans user={user}/>:<>
-    <div className="head"><h1>{cur?cur.name:'Todos os meus itens'}</h1>
-     {cur&&cur.my_role==='owner'&&<div><button onClick={()=>setShare(true)}>Compartilhar</button> <button className="danger" onClick={()=>delFolder(cur)}>Excluir pasta</button></div>}
-     {cur&&cur.my_role!=='owner'&&<span className="kind">De {cur.owner_email}</span>}
-    </div>
-    <Items key={view} user={user} folder={cur||null} role={cur?.my_role}/>
-    {share&&cur&&<Share folder={cur} onClose={()=>setShare(false)}/>}
-   </>}
-  </main>
+   <nav className="navpill" aria-label="Principal">
+    <a href="#" aria-current={view!=='plans'?'page':undefined} onClick={go('all')}>Itens</a>
+    <a href="#" aria-current={view==='plans'?'page':undefined} onClick={go('plans')}>Planos de ação</a>
+   </nav>
+   <div className="tools"><span className="t-caption user-email">{user.email}</span><span className="avatar">{user.email[0].toUpperCase()}</span><button className="btn btn--ghost btn--sm" onClick={()=>supabase.auth.signOut()}>Sair</button></div>
+  </header>
+  <div className="board">
+   <nav className="card side" aria-label="Pastas">
+    <button aria-current={cp('all')} onClick={()=>setView('all')}>Todos os meus itens</button>
+    <h4>Minhas pastas</h4>{folders.filter(f=>f.my_role==='owner').map(btn)}
+    <button className="add" onClick={addFolder}>+ Nova pasta</button>
+    {folders.some(f=>f.my_role!=='owner')&&<><h4>Compartilhadas comigo</h4>{folders.filter(f=>f.my_role!=='owner').map(btn)}</>}
+   </nav>
+   <main>
+    {view==='plans'?<Plans user={user}/>:<>
+     <div className="head"><h1 className="page-title">{cur?cur.name:'Todos os meus itens'}</h1>
+      {cur&&cur.my_role==='owner'&&<div className="row" style={{margin:0}}><button className="btn btn--accent btn--sm" onClick={()=>setShare(true)}>Compartilhar</button><button className="btn btn--ghost btn--sm danger" onClick={()=>delFolder(cur)}>Excluir pasta</button></div>}
+      {cur&&cur.my_role!=='owner'&&<span className="badge badge--info">De {cur.owner_email}</span>}
+     </div>
+     <Items key={view} user={user} folder={cur||null} role={cur?.my_role}/>
+     {share&&cur&&<Share folder={cur} onClose={()=>setShare(false)}/>}
+    </>}
+   </main>
+  </div>
  </div>
 }

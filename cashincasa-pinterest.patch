@@ -1,0 +1,793 @@
+diff --git a/index.html b/index.html
+index 83a5210..8ddc00c 100644
+--- a/index.html
++++ b/index.html
+@@ -2,5 +2,6 @@
+ <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+ <link rel="manifest" href="/manifest.webmanifest"/><meta name="theme-color" content="#103024"/><link rel="apple-touch-icon" href="/icon-192.png"/>
+ <title>cashIncasa</title>
+-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
++<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
++<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+ </head><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>
+diff --git a/src/App.jsx b/src/App.jsx
+index 3f7e2e9..2b4914b 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -1,11 +1,14 @@
+-import {useEffect,useState,useCallback} from 'react'
++import {useEffect,useState,useCallback,useRef} from 'react'
+ import {supabase} from './supabase'
+ import Auth from './Auth'
+ import Items from './Items'
+ import Plans from './Plans'
+ import Share from './Share'
++import Sheet from './Sheet'
++import Icon from './Icon'
+ export default function App(){
+- const [session,setSession]=useState(undefined),[folders,setFolders]=useState([]),[view,setView]=useState('all'),[share,setShare]=useState(false),[menu,setMenu]=useState(false)
++ const [session,setSession]=useState(undefined),[folders,setFolders]=useState([]),[view,setView]=useState('all'),[share,setShare]=useState(false),[profile,setProfile]=useState(false),[q,setQ]=useState(''),[tick,setTick]=useState(0)
++ const searchRef=useRef(null)
+  useEffect(()=>{
+   supabase.auth.getSession().then(({data})=>setSession(data.session))
+   const {data:l}=supabase.auth.onAuthStateChange((_,s)=>setSession(s))
+@@ -15,8 +18,8 @@ export default function App(){
+  useEffect(()=>{session&&load()},[session,load])
+  if(session===undefined)return null
+  if(!session)return <Auth/>
+- const user=session.user
+- const nav=v=>{setView(v);setMenu(false)}
++ const user=session.user,initial=user.email[0].toUpperCase()
++ const nav=v=>{setView(v);setProfile(false);scrollTo({top:0})}
+  const addFolder=async()=>{
+   const name=prompt('Nome da pasta');if(!name)return
+   const {data,error}=await supabase.from('folders').insert({name}).select().single()
+@@ -27,37 +30,43 @@ export default function App(){
+   if(!confirm(`Excluir a pasta "${f.name}"? Os itens ficam sem pasta.`))return
+   await supabase.from('folders').delete().eq('id',f.id);nav('all');load()
+  }
+- const cur=folders.find(f=>f.id===view)
++ const cur=folders.find(f=>f.id===view),plans=view==='plans'
+  const cp=v=>view===v?'page':undefined
+- const title=view==='plans'?'Planos de ação':cur?cur.name:'Todos os itens'
+- const chips=<div className="chips"><button aria-current={cp('all')} onClick={()=>nav('all')}>Todos</button>{folders.map(f=><button key={f.id} aria-current={cp(f.id)} onClick={()=>nav(f.id)}>{f.my_role!=='owner'?'👥 ':''}{f.name}</button>)}<button onClick={addFolder}>+ Pasta</button></div>
+- const fbtn=f=><button key={f.id} className="nav-i" aria-current={cp(f.id)} onClick={()=>nav(f.id)}><span aria-hidden="true">{f.my_role==='owner'?'📁':'👥'}</span><span className="lbl">{f.name}</span>{f.my_role!=='owner'&&<span className="role">{f.my_role==='editor'?'editor':'leitor'}</span>}</button>
+- return <div className="shell">
+-  <header className="mbar"><strong className="mtitle">{title}</strong></header>
+-  {menu&&<div className="scrim" onClick={()=>setMenu(false)}/>}
+-  <aside className={'sidebar'+(menu?' open':'')} aria-label="Menu">
+-   <div className="ws"><div className="brand">cash<b>In</b>casa</div></div>
+-   <button className="nav-i" aria-current={cp('all')} onClick={()=>nav('all')}><span aria-hidden="true">📥</span><span className="lbl">Todos os itens</span></button>
+-   <button className="nav-i" aria-current={cp('plans')} onClick={()=>nav('plans')}><span aria-hidden="true">🎯</span><span className="lbl">Planos de ação</span></button>
+-   <div className="sec"><span>Pastas</span><button aria-label="Nova pasta" title="Nova pasta" onClick={addFolder}>+</button></div>
+-   {folders.filter(f=>f.my_role==='owner').map(fbtn)}
+-   {folders.some(f=>f.my_role!=='owner')&&<><div className="sec"><span>Compartilhadas comigo</span></div>{folders.filter(f=>f.my_role!=='owner').map(fbtn)}</>}
+-   <div className="foot"><span className="avatar">{user.email[0].toUpperCase()}</span><span className="e">{user.email}</span><button className="btn btn--ghost btn--sm" onClick={()=>supabase.auth.signOut()}>Sair</button></div>
+-  </aside>
+-  <main className="content"><div className="page">
+-   {view==='plans'?<Plans user={user}/>:<>
+-    <div className="head"><h1 className="page-title">{cur?cur.name:'Todos os itens'}</h1>
+-     {cur&&cur.my_role==='owner'&&<div className="row" style={{margin:0}}><button className="btn btn--primary btn--sm" onClick={()=>setShare(true)}>Compartilhar</button><button className="btn btn--ghost btn--sm danger" onClick={()=>delFolder(cur)}>Excluir pasta</button></div>}
+-     {cur&&cur.my_role!=='owner'&&<span className="badge badge--info">De {cur.owner_email}</span>}
+-    </div>
+-    {chips}<Items key={view} user={user} folder={cur||null} role={cur?.my_role}/>
++ const addItem=()=>{if(plans)setView('all');setTick(t=>t+1)}
++ const goSearch=()=>{if(plans)setView('all');scrollTo({top:0,behavior:'smooth'});setTimeout(()=>searchRef.current?.focus(),80)}
++ const navItems=[
++  {id:'home',icon:'home',label:'Início',on:()=>nav(plans?'all':view),cur:!plans},
++  {id:'search',icon:'search',label:'Buscar',on:goSearch},
++  {id:'add',icon:'plus',label:'Novo',on:addItem,add:true},
++  {id:'plans',icon:'target',label:'Planos',on:()=>nav('plans'),cur:plans}
++ ]
++ const btns=navItems.map(it=><button key={it.id} className={'nb'+(it.add?' nb--add':'')} aria-current={it.cur?'page':undefined} onClick={it.on}><span className="ind"><Icon n={it.icon} size={it.add?24:22}/></span><span className="nl">{it.label}</span></button>)
++ const me=<button className="nb" aria-label="Minha conta" onClick={()=>setProfile(true)}><span className="ind"><span className="avatar avatar--sm">{initial}</span></span><span className="nl">Conta</span></button>
++ return <div className="app">
++  <nav className="rail" aria-label="Navegação"><div className="mark" aria-hidden="true">In</div>{btns}<span className="spacer"/>{me}</nav>
++  {!plans&&<header className="top glass"><div className="wrap">
++   <label className="searchbar"><Icon n="search" size={20}/><input ref={searchRef} type="search" aria-label="Buscar" placeholder="Buscar links, ideias e prompts" value={q} onChange={e=>setQ(e.target.value)}/></label>
++   <div className="tabs" role="tablist" aria-label="Pastas">
++    <button role="tab" aria-current={cp('all')} onClick={()=>nav('all')}>Todos</button>
++    {folders.map(f=><button role="tab" key={f.id} aria-current={cp(f.id)} onClick={()=>nav(f.id)}>{f.name}</button>)}
++    <button className="tabs-add" onClick={addFolder}><Icon n="plus" size={16}/>Pasta</button>
++   </div>
++  </div></header>}
++  <main className="content">
++   {plans?<div className="narrow"><Plans user={user}/></div>:<div className="page">
++    <h1 className="sr">{cur?cur.name:'Todos os itens'}</h1>
++    {cur&&<div className="folderbar">
++     {cur.my_role==='owner'?<><button className="btn btn--tonal btn--sm" onClick={()=>setShare(true)}><Icon n="share" size={16}/>Compartilhar</button><button className="btn btn--ghost btn--sm danger" onClick={()=>delFolder(cur)}><Icon n="trash" size={16}/>Excluir pasta</button></>:<span className="badge badge--info">Compartilhada por {cur.owner_email} · {cur.my_role==='editor'?'editor':'leitor'}</span>}
++    </div>}
++    <Items key={view} user={user} folder={cur||null} role={cur?.my_role} q={q} addTick={tick}/>
+     {share&&cur&&<Share folder={cur} onClose={()=>setShare(false)}/>}
+-   </>}
+-  </div></main>
+-  <nav className="tabbar" aria-label="Navegação">
+-   <button aria-current={view!=='plans'&&!menu?'page':undefined} onClick={()=>nav(view==='plans'?'all':view)}><span aria-hidden="true">📥</span><span>Itens</span></button>
+-   <button aria-current={view==='plans'&&!menu?'page':undefined} onClick={()=>nav('plans')}><span aria-hidden="true">🎯</span><span>Planos</span></button>
+-   <button aria-current={menu?'page':undefined} onClick={()=>setMenu(true)}><span aria-hidden="true">📁</span><span>Pastas</span></button>
+-  </nav>
++   </div>}
++  </main>
++  <nav className="bottombar glass" aria-label="Navegação">{btns}{me}</nav>
++  {profile&&<Sheet onClose={()=>setProfile(false)} label="Minha conta">
++   <div className="prof"><span className="avatar avatar--lg">{initial}</span><div><strong>Minha conta</strong><span className="kind">{user.email}</span></div></div>
++   <button className="mi" onClick={()=>{setProfile(false);addFolder()}}><Icon n="folder"/>Nova pasta</button>
++   <button className="mi" onClick={()=>supabase.auth.signOut()}><Icon n="logout"/>Sair</button>
++  </Sheet>}
+  </div>
+ }
+diff --git a/src/Auth.jsx b/src/Auth.jsx
+index 3715818..bf4e81d 100644
+--- a/src/Auth.jsx
++++ b/src/Auth.jsx
+@@ -1,19 +1,26 @@
+ import {useState} from 'react'
+ import {supabase} from './supabase'
++import Icon from './Icon'
+ export default function Auth(){
+- const [mode,setMode]=useState('in'),[email,setEmail]=useState(''),[pw,setPw]=useState(''),[msg,setMsg]=useState('')
++ const [mode,setMode]=useState('in'),[email,setEmail]=useState(''),[pw,setPw]=useState(''),[msg,setMsg]=useState(''),[busy,setBusy]=useState(false)
+  const go=async e=>{
+-  e.preventDefault();setMsg('')
++  e.preventDefault();setMsg('');setBusy(true)
+   const {error}=mode==='in'?await supabase.auth.signInWithPassword({email,password:pw}):await supabase.auth.signUp({email,password:pw})
+-  if(error)setMsg(error.message)
++  setBusy(false);if(error)setMsg(error.message)
+  }
+- return <form className="auth card" onSubmit={go}>
+-  <div className="brand">cash<b>In</b>casa</div>
+-  <p className="empty">Salve links, organize ideias e transforme tudo em plano de ação.</p>
+-  <div className="row"><input className="input" type="email" required placeholder="E-mail" value={email} onChange={e=>setEmail(e.target.value)}/></div>
+-  <div className="row"><input className="input" type="password" required minLength={6} placeholder="Senha (mínimo 6 caracteres)" value={pw} onChange={e=>setPw(e.target.value)}/></div>
+-  <div className="row"><button className="btn btn--primary">{mode==='in'?'Entrar':'Criar conta'}</button></div>
+-  {msg&&<p style={{color:'#b3261e'}}>{msg}</p>}
+-  <button type="button" className="link" onClick={()=>setMode(mode==='in'?'up':'in')}>{mode==='in'?'Não tenho conta':'Já tenho conta'}</button>
+- </form>
++ return <div className="auth-wrap">
++  <section className="auth-hero">
++   <div className="brand">cash<b>In</b>casa</div>
++   <div><h1>Transforme o que você salva em dinheiro.</h1><p>Guarde vídeos, ideias e prompts num só lugar. Organize em pastas e acompanhe cada tarefa até virar resultado.</p></div>
++   <ul><li><Icon n="link" size={18}/>Links de YouTube, TikTok, Instagram e Kwai</li><li><Icon n="folder" size={18}/>Pastas que você pode compartilhar</li><li><Icon n="target" size={18}/>Planos de ação com prazo</li></ul>
++  </section>
++  <form className="auth-form" onSubmit={go}>
++   <h2>{mode==='in'?'Entrar na sua conta':'Criar sua conta'}</h2>
++   <label>E-mail<input className="input" type="email" required autoComplete="email" placeholder="voce@email.com" value={email} onChange={e=>setEmail(e.target.value)}/></label>
++   <label>Senha<input className="input" type="password" required minLength={6} autoComplete={mode==='in'?'current-password':'new-password'} placeholder="Mínimo de 6 caracteres" value={pw} onChange={e=>setPw(e.target.value)}/></label>
++   {msg&&<p className="auth-err" role="alert">{msg}</p>}
++   <button className="btn btn--primary" disabled={busy}>{busy?'Aguarde…':mode==='in'?'Entrar':'Criar conta'}</button>
++   <p className="auth-switch">{mode==='in'?'Ainda não tem conta?':'Já tem conta?'} <button type="button" className="link" onClick={()=>{setMode(mode==='in'?'up':'in');setMsg('')}}>{mode==='in'?'Criar conta':'Entrar'}</button></p>
++  </form>
++ </div>
+ }
+diff --git a/src/Icon.jsx b/src/Icon.jsx
+new file mode 100644
+index 0000000..cb0e94b
+--- /dev/null
++++ b/src/Icon.jsx
+@@ -0,0 +1,29 @@
++const P = {
++  inbox: <><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></>,
++  target: <><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></>,
++  folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
++  users: <><path d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="9.5" cy="8" r="3.5"/><path d="M21 20v-1a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.74"/></>,
++  plus: <path d="M12 5v14M5 12h14"/>,
++  search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></>,
++  grid: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
++  list: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>,
++  link: <><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></>,
++  note: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></>,
++  prompt: <><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></>,
++  idea: <><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></>,
++  play: <path d="M7 4v16l13-8z"/>,
++  out: <><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></>,
++  copy: <><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></>,
++  trash: <><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></>,
++  share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></>,
++  close: <path d="M6 6l12 12M18 6 6 18"/>,
++  menu: <path d="M4 7h16M4 12h16M4 17h16"/>,
++  logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></>,
++  save: <path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>,
++  home: <path d="M3 11 12 3l9 8M5 9.5V20h5v-6h4v6h5V9.5"/>,
++  more: <><circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/></>,
++  check: <path d="m5 12 5 5 9-10"/>,
++}
++export default function Icon({ n, size = 20, ...p }) {
++  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...p}>{P[n]}</svg>
++}
+diff --git a/src/Items.jsx b/src/Items.jsx
+index 211a0e2..95df244 100644
+--- a/src/Items.jsx
++++ b/src/Items.jsx
+@@ -1,5 +1,7 @@
+ import {useEffect,useState,useCallback} from 'react'
+ import {supabase} from './supabase'
++import Icon from './Icon'
++import Sheet from './Sheet'
+ export function detect(url){
+  let u;try{u=new URL(url)}catch{return {platform:'site'}}
+  const h=u.hostname.replace('www.','')
+@@ -13,6 +15,8 @@ export function detect(url){
+  return {platform:'site'}
+ }
+ const KIND={link:'Link',note:'Nota',prompt:'Prompt',idea:'Ideia'}
++const KICON={link:'link',note:'note',prompt:'prompt',idea:'idea'}
++const PLAT={youtube:'YouTube',tiktok:'TikTok',instagram:'Instagram',kwai:'Kwai',site:'Site'}
+ let pending=(()=>{
+  const q=new URLSearchParams(location.search)
+  if(!q.get('url')&&!q.get('text')&&!q.get('title'))return null
+@@ -23,18 +27,19 @@ let pending=(()=>{
+  return {type:'link',url:m[0],title,content:raw.replace(m[0],'').trim()}
+ })()
+ const empty={type:'link',url:'',title:'',content:'',tags:'',thumb:'',platform:''}
+-export default function Items({user,folder,role}){
+- const [adding,setAdding]=useState(()=>!!pending)
+- const [items,setItems]=useState([]),[q,setQ]=useState(''),[open,setOpen]=useState(null),[f,setF]=useState(()=>{const p=pending;pending=null;return p?{...empty,...p}:empty})
++const TILE={link:'lilac',note:'sand',prompt:'mint',idea:'rose'}
++const host=u=>{try{return new URL(u).hostname.replace('www.','')}catch{return ''}}
++export default function Items({user,folder,role,q,addTick}){
++ const [adding,setAdding]=useState(()=>!!pending||addTick>0)
++ const [items,setItems]=useState([]),[open,setOpen]=useState(null),[menu,setMenu]=useState(null),[play,setPlay]=useState(false),[f,setF]=useState(()=>{const p=pending;pending=null;return p?{...empty,...p}:empty})
+  const canEdit=!folder||role!=='viewer'
+- const [mode,setMode]=useState(()=>{try{return localStorage.getItem('vm')||(matchMedia('(max-width:860px)').matches?'list':'grid')}catch{return 'grid'}})
+- const pick=m=>{setMode(m);try{localStorage.setItem('vm',m)}catch{}}
+  const load=useCallback(async()=>{
+   let qy=supabase.from('items').select('*').order('created_at',{ascending:false})
+   qy=folder?qy.eq('folder_id',folder.id):qy.eq('owner_id',user.id)
+   const {data}=await qy;setItems(data||[])
+  },[folder?.id,user.id])
+  useEffect(()=>{load()},[load])
++ useEffect(()=>{if(addTick)setAdding(true)},[addTick])
+  const set=k=>e=>setF({...f,[k]:e.target.value})
+  const preview=async()=>{
+   if(f.type!=='link'||!f.url)return
+@@ -52,47 +57,75 @@ export default function Items({user,folder,role}){
+   if(error)return alert(error.message)
+   setF({...f,url:'',title:'',content:'',tags:'',thumb:'',platform:''});setAdding(false);load()
+  }
+- const del=async i=>{if(confirm('Excluir este item?')){await supabase.from('items').delete().eq('id',i.id);load()}}
++ const closeAll=()=>{setOpen(null);setMenu(null);setPlay(false)}
++ const del=async i=>{if(confirm('Excluir este item?')){await supabase.from('items').delete().eq('id',i.id);closeAll();load()}}
+  const keep=async i=>{
+   const {id,owner_id,folder_id,created_at,...rest}=i
+   const {error}=await supabase.from('items').insert({...rest,copied_from:id,folder_id:null})
+   alert(error?error.message:'Salvo na sua biblioteca.')
+  }
+- const shown=items.filter(i=>[i.title,i.content,i.url,...i.tags].join(' ').toLowerCase().includes(q.toLowerCase()))
++ const actions=i=>[
++  i.url&&{k:'open',icon:'out',label:'Abrir original',href:i.url},
++  i.content&&{k:'copy',icon:'copy',label:'Copiar texto',run:()=>navigator.clipboard.writeText(i.content)},
++  i.owner_id!==user.id&&{k:'keep',icon:'save',label:'Salvar na minha biblioteca',run:()=>keep(i)},
++  (i.owner_id===user.id||role==='owner')&&{k:'del',icon:'trash',label:'Excluir',danger:true,run:()=>del(i)}
++ ].filter(Boolean)
++ const term=(q||'').toLowerCase()
++ const shown=items.filter(i=>[i.title,i.content,i.url,...(i.tags||[])].join(' ').toLowerCase().includes(term))
++ const cur=items.find(i=>i.id===open),mi=items.find(i=>i.id===menu)
++ const dc=cur?.url?detect(cur.url):{}
+  return <>
+-  {canEdit&&<button className="fab" aria-label="Novo item" onClick={()=>setAdding(true)}>+</button>}
+-  {canEdit&&adding&&<div className="sheet-scrim" onClick={()=>setAdding(false)}/>}
+-  {canEdit&&<form className={'card addform'+(adding?' open':'')} onSubmit={save}>
+-   <div className="sheet-head"><strong>Novo item</strong><button type="button" className="btn btn--ghost btn--sm" onClick={()=>setAdding(false)}>Fechar</button></div>
+-   <div className="row">
+-    <select className="input" value={f.type} onChange={set('type')} style={{maxWidth:160}}>{Object.entries(KIND).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+-    {f.type==='link'&&<input className="input" required placeholder="Cole o link (YouTube, TikTok, Instagram, Kwai ou site)" value={f.url} onChange={set('url')} onBlur={preview} style={{flex:3}}/>}
+-    <input className="input" placeholder="Título" value={f.title} onChange={set('title')} style={{flex:2}}/>
++  {shown.length===0&&<div className="emptybox"><span className="ic"><Icon n={items.length?'search':'inbox'} size={26}/></span><h2>{items.length?'Nada encontrado':'Sua biblioteca está vazia'}</h2><p>{items.length?'Tente outra palavra, ou busque por uma tag.':'Cole um link de vídeo, escreva uma ideia ou guarde um prompt para começar.'}</p>{!items.length&&canEdit&&<button className="btn btn--primary" onClick={()=>setAdding(true)}><Icon n="plus" size={16}/>Adicionar o primeiro item</button>}</div>}
++  <div className="masonry">{shown.map(i=>{
++   const d=i.url?detect(i.url):{},tile=!i.thumbnail,plat=i.platform&&i.platform!=='site'?(PLAT[i.platform]||i.platform):''
++   return <article className="pin" key={i.id}>
++    <button className="pin-media" onClick={()=>{setOpen(i.id);setPlay(false)}} aria-label={'Abrir '+(i.title||KIND[i.type])}>
++     {tile?<div className={'tile tile--'+TILE[i.type]}>
++       <span className="tic"><Icon n={KICON[i.type]} size={18}/></span>
++       {i.title&&<h3>{i.title}</h3>}
++       {i.content&&<p>{i.content}</p>}
++       {i.url&&<span className="host">{host(i.url)}</span>}
++      </div>:<img src={i.thumbnail} alt="" loading="lazy"/>}
++     {d.embed&&<span className="playbadge"><Icon n="play" size={18}/></span>}
++    </button>
++    <div className="pin-foot">
++     <div className="pin-t">{!tile&&i.title&&<p className="pin-title">{i.title}</p>}<span className="pin-meta">{KIND[i.type]}{plat?` · ${plat}`:''}</span></div>
++     <button className="icon-btn" aria-label="Mais ações" onClick={()=>setMenu(i.id)}><Icon n="more"/></button>
++    </div>
++   </article>})}</div>
++
++  {mi&&<Sheet onClose={()=>setMenu(null)} label="Ações do item">
++   {actions(mi).map(a=>a.href?<a key={a.k} className="mi" href={a.href} target="_blank" rel="noreferrer" onClick={()=>setMenu(null)}><Icon n={a.icon}/>{a.label}</a>:<button key={a.k} className={'mi'+(a.danger?' danger':'')} onClick={()=>{a.run();if(!a.danger)setMenu(null)}}><Icon n={a.icon}/>{a.label}</button>)}
++  </Sheet>}
++
++  {cur&&<Sheet wide onClose={closeAll} label="Detalhes do item">
++   <button className="x glass" aria-label="Fechar" onClick={closeAll}><Icon n="close"/></button>
++   {play&&dc.embed?<iframe className={'dframe'+(dc.platform==='youtube'?' wide':'')} src={dc.embed} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title={cur.title||'vídeo'}/>:cur.thumbnail?<img className="dimg" src={cur.thumbnail} alt=""/>:null}
++   <div className="dbody">
++    <span className="kind">{KIND[cur.type]}{cur.platform&&cur.platform!=='site'?` · ${PLAT[cur.platform]||cur.platform}`:''}</span>
++    {cur.title&&<h2 className="dtitle">{cur.title}</h2>}
++    {cur.content&&<pre className="dtext">{cur.content}</pre>}
++    {play&&cur.url&&!dc.embed&&<span className="hint">Esta plataforma não permite player dentro do app. Use “Abrir original”.</span>}
++    {cur.tags?.length>0&&<div className="tags">{cur.tags.map(t=><span className="tag" key={t}>{t}</span>)}</div>}
++    <div className="dacts">
++     {dc.embed&&<button className="btn btn--primary" onClick={()=>setPlay(!play)}><Icon n={play?'close':'play'} size={16}/>{play?'Fechar vídeo':'Assistir aqui'}</button>}
++     {actions(cur).map(a=>a.href?<a key={a.k} className="btn btn--ghost" href={a.href} target="_blank" rel="noreferrer"><Icon n={a.icon} size={16}/>{a.label}</a>:<button key={a.k} className={'btn btn--ghost'+(a.danger?' danger':'')} onClick={a.run}><Icon n={a.icon} size={16}/>{a.label}</button>)}
++    </div>
+    </div>
+-   {f.type!=='link'&&<div className="row"><textarea className="input" required rows={4} placeholder={f.type==='prompt'?'Escreva o prompt':'Escreva aqui'} value={f.content} onChange={set('content')}/></div>}
+-   {f.type==='link'&&<div className="row"><textarea className="input" rows={2} placeholder="Anotação sobre este link (opcional)" value={f.content} onChange={set('content')}/></div>}
+-   <div className="row"><input className="input" placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/><button className="btn btn--primary btn--sm" style={{flex:'0 0 auto'}}>Salvar</button></div>
+-  </form>}
+-  <div className="toolbar"><input className="input" placeholder="Buscar por título, texto ou tag" value={q} onChange={e=>setQ(e.target.value)}/><div className="segmented" role="group" aria-label="Visualização"><button type="button" aria-pressed={mode==='grid'} onClick={()=>pick('grid')}>Galeria</button><button type="button" aria-pressed={mode==='list'} onClick={()=>pick('list')}>Lista</button></div></div>
+-  {shown.length===0&&<p className="empty">{items.length?'Nada encontrado para essa busca.':'Nenhum item ainda. Cole um link ou escreva uma nota acima.'}</p>}
+-  <div className={'grid '+(mode==='list'?'list':'')}>{shown.map(i=>{
+-   const d=i.url?detect(i.url):{},mine=i.owner_id===user.id
+-   return <div className="card item" key={i.id}>
+-    {open===i.id&&d.embed?<iframe className={d.platform==='youtube'?'wide':''} src={d.embed} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title={i.title||'vídeo'}/>:i.thumbnail&&<img src={i.thumbnail} alt="" loading="lazy"/>}
+-    <div className="in">
+-     <span className="kind">{KIND[i.type]}{i.platform?` · ${i.platform}`:''}</span>
+-     {i.title&&<h3 className="t-h3">{i.title}</h3>}
+-     {i.content&&<pre>{i.content}</pre>}
+-     {open===i.id&&i.url&&!d.embed&&<span className="kind">Esta plataforma não permite player dentro do app. Use “Abrir original”.</span>}
+-     <div>{i.tags.map(t=><span className="badge badge--success" key={t}>{t}</span>)}</div>
+-     <div className="acts">
+-      {d.embed&&<button className="btn btn--ghost btn--sm" onClick={()=>setOpen(open===i.id?null:i.id)}>{open===i.id?'Fechar vídeo':'Assistir aqui'}</button>}
+-      {i.url&&<a href={i.url} target="_blank" rel="noreferrer"><button className="btn btn--ghost btn--sm">Abrir original</button></a>}
+-      {(i.type==='prompt'||i.type==='note'||i.type==='idea')&&<button className="btn btn--ghost btn--sm" onClick={()=>navigator.clipboard.writeText(i.content||'')}>Copiar</button>}
+-      {!mine&&<button className="btn btn--ghost btn--sm" onClick={()=>keep(i)}>Salvar na minha biblioteca</button>}
+-      {(mine||role==='owner')&&<button className="btn btn--ghost btn--sm danger" onClick={()=>del(i)}>Excluir</button>}
+-     </div>
++  </Sheet>}
++
++  {canEdit&&adding&&<Sheet onClose={()=>setAdding(false)} label="Novo item">
++   <form className="fgrid" onSubmit={save}>
++    <div className="sheet-head"><strong>Novo item</strong><button type="button" className="icon-btn" aria-label="Fechar" onClick={()=>setAdding(false)}><Icon n="close"/></button></div>
++    <div className="frow">
++     <select className="input" aria-label="Tipo" value={f.type} onChange={set('type')}>{Object.entries(KIND).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
++     {f.type==='link'?<input className="input" required type="url" inputMode="url" placeholder="Cole o link (YouTube, TikTok, Instagram, Kwai…)" value={f.url} onChange={set('url')} onBlur={preview}/>:<input className="input" placeholder="Título" value={f.title} onChange={set('title')}/>}
+     </div>
+-   </div>})}</div>
++    {f.type==='link'&&<input className="input" placeholder="Título (opcional)" value={f.title} onChange={set('title')}/>}
++    <textarea className="input" required={f.type!=='link'} rows={f.type==='link'?2:5} placeholder={f.type==='link'?'Anotação sobre este link (opcional)':f.type==='prompt'?'Escreva o prompt':'Escreva aqui'} value={f.content} onChange={set('content')}/>
++    <input className="input" placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/>
++    <button className="btn btn--primary btn--lg">Salvar item</button>
++   </form>
++  </Sheet>}
+  </>
+ }
+diff --git a/src/Plans.jsx b/src/Plans.jsx
+index 768a132..5899a5c 100644
+--- a/src/Plans.jsx
++++ b/src/Plans.jsx
+@@ -1,5 +1,6 @@
+ import {useEffect,useState} from 'react'
+ import {supabase} from './supabase'
++import Icon from './Icon'
+ const NEXT={todo:'doing',doing:'done',done:'todo'},LABEL={todo:'A fazer',doing:'Fazendo',done:'Feito'}
+ export default function Plans({user}){
+  const [plans,setPlans]=useState([]),[cur,setCur]=useState(null),[tasks,setTasks]=useState([]),[links,setLinks]=useState([]),[t,setT]=useState(''),[due,setDue]=useState('')
+@@ -24,25 +25,27 @@ export default function Plans({user}){
+  const delTask=async k=>{await supabase.from('tasks').delete().eq('id',k.id);loadT(cur.id)}
+  const attach=async(k,item)=>{if(!item)return;await supabase.from('task_items').insert({task_id:k.id,item_id:item});loadT(cur.id)}
+  const done=tasks.filter(k=>k.status==='done').length
++ const pct=tasks.length?Math.round(done/tasks.length*100):0
+  return <>
+-  <div className="head"><h1 className="page-title">Planos de ação</h1><button className="btn btn--primary btn--sm" onClick={addPlan}>Novo plano</button></div>
+-  <div className="row plans-row">{plans.map(p=><button key={p.id} className={'btn btn--sm '+(cur?.id===p.id?'btn--primary':'btn--ghost')} onClick={()=>setCur(p)} style={{flex:'0 0 auto'}}>{p.title}</button>)}</div>
+-  {!plans.length&&<p className="empty">Crie um plano para transformar seus links e ideias em tarefas com prazo.</p>}
++  <div className="head"><div><h1 className="page-title">Planos de ação</h1><p className="sub">Quebre uma meta em tarefas com prazo e ligue cada uma aos seus links.</p></div><button className="btn btn--primary btn--sm" onClick={addPlan}><Icon n="plus" size={16}/>Novo plano</button></div>
++  {plans.length>0&&<div className="plans-row">{plans.map(p=><button key={p.id} className={'btn btn--sm '+(cur?.id===p.id?'btn--primary':'btn--ghost')} onClick={()=>setCur(p)}>{p.title}</button>)}</div>}
++  {!plans.length&&<div className="emptybox"><span className="ic"><Icon n="target" size={26}/></span><h2>Nenhum plano ainda</h2><p>Crie um plano, por exemplo “Primeira venda online”, e divida em tarefas com prazo.</p><button className="btn btn--primary" onClick={addPlan}><Icon n="plus" size={16}/>Criar primeiro plano</button></div>}
++  {plans.length>0&&!cur&&<p className="empty">Escolha um plano acima para ver as tarefas.</p>}
+   {cur&&<div className="card">
+-   <div className="head"><h2 className="t-title">{cur.title}</h2><span className="kind">{done} de {tasks.length} tarefas feitas <button className="link danger" onClick={delPlan}>Excluir plano</button></span></div>
+-   <form className="row" onSubmit={addTask}>
+-    <input className="input" required placeholder="Nova tarefa" value={t} onChange={e=>setT(e.target.value)} style={{flex:3}}/>
+-    <input className="input" type="date" value={due} onChange={e=>setDue(e.target.value)}/>
+-    <button className="btn btn--primary btn--sm" style={{flex:'0 0 auto'}}>Adicionar</button>
++   <div className="head" style={{alignItems:'center'}}><h2 className="t-title">{cur.title}</h2><button className="btn btn--ghost btn--sm danger" onClick={delPlan}><Icon n="trash" size={15}/>Excluir plano</button></div>
++   <p className="kind" style={{margin:'6px 0 8px'}}>{done} de {tasks.length} tarefas feitas{tasks.length>0&&` · ${pct}%`}</p>
++   <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100"><div className="progress__bar" style={{width:pct+'%'}}/></div>
++   <form className="addtask" onSubmit={addTask}>
++    <input className="input" required placeholder="Nova tarefa" value={t} onChange={e=>setT(e.target.value)}/>
++    <input className="input" type="date" aria-label="Prazo" value={due} onChange={e=>setDue(e.target.value)}/>
++    <button className="btn btn--primary">Adicionar</button>
+    </form>
+-   {tasks.map(k=><div key={k.id}>
+-    <div className={'task '+k.status}>
+-     <button className={'badge st '+k.status} onClick={()=>cycle(k)} title="Mudar status">{LABEL[k.status]}</button>
+-     <span className="t">{k.title}{k.due_date&&<small className="kind"> · prazo {new Date(k.due_date+'T00:00').toLocaleDateString('pt-BR')}</small>}</span>
+-     <select className="input" style={{width:150}} value="" onChange={e=>attach(k,e.target.value)}><option value="">Vincular link</option>{links.map(l=><option key={l.id} value={l.id}>{(l.title||l.url).slice(0,40)}</option>)}</select>
+-     <button className="btn btn--ghost btn--sm danger" onClick={()=>delTask(k)}>Excluir</button>
+-    </div>
+-    {k.task_items?.map(x=><div key={x.item_id} className="kind" style={{paddingLeft:'6rem'}}><a href={x.items?.url} target="_blank" rel="noreferrer">{x.items?.title||x.items?.url}</a></div>)}
++   {tasks.length===0&&<p className="empty" style={{padding:'12px 0'}}>Adicione a primeira tarefa deste plano.</p>}
++   {tasks.map(k=><div key={k.id} className={'task '+k.status}>
++    <button className={'badge st '+k.status} onClick={()=>cycle(k)} title="Mudar status">{LABEL[k.status]}</button>
++    <div className="t"><span>{k.title}</span>{k.due_date&&<small className="kind">Prazo: {new Date(k.due_date+'T00:00').toLocaleDateString('pt-BR')}</small>}{k.task_items?.map(x=><a key={x.item_id} href={x.items?.url} target="_blank" rel="noreferrer">{x.items?.title||x.items?.url}</a>)}</div>
++    <button className="icon-btn danger" aria-label="Excluir tarefa" title="Excluir tarefa" onClick={()=>delTask(k)}><Icon n="trash" size={18}/></button>
++    <select className="input attach" aria-label="Vincular link" value="" onChange={e=>attach(k,e.target.value)}><option value="">Vincular link</option>{links.map(l=><option key={l.id} value={l.id}>{(l.title||l.url).slice(0,40)}</option>)}</select>
+    </div>)}
+   </div>}
+  </>
+diff --git a/src/Share.jsx b/src/Share.jsx
+index c0030b2..d8e53d7 100644
+--- a/src/Share.jsx
++++ b/src/Share.jsx
+@@ -1,5 +1,7 @@
+ import {useEffect,useState,useCallback} from 'react'
+ import {supabase} from './supabase'
++import Icon from './Icon'
++import Sheet from './Sheet'
+ export default function Share({folder,onClose}){
+  const [list,setList]=useState([]),[email,setEmail]=useState(''),[role,setRole]=useState('viewer')
+  const load=useCallback(async()=>{const {data}=await supabase.rpc('list_folder_shares',{p_folder_id:folder.id});setList(data||[])},[folder.id])
+@@ -11,15 +13,14 @@ export default function Share({folder,onClose}){
+   setEmail('');load()
+  }
+  const remove=async u=>{await supabase.from('folder_shares').delete().eq('folder_id',folder.id).eq('user_id',u);load()}
+- return <div className="modal" onClick={onClose}><div className="card" onClick={e=>e.stopPropagation()}>
+-  <h3 className="t-title">Compartilhar "{folder.name}"</h3>
+-  <form className="row" onSubmit={add} style={{marginTop:'1rem'}}>
+-   <input className="input" type="email" required placeholder="E-mail do usuário" value={email} onChange={e=>setEmail(e.target.value)}/>
+-   <select className="input" value={role} onChange={e=>setRole(e.target.value)}><option value="viewer">Leitor</option><option value="editor">Editor</option></select>
+-   <button className="btn btn--primary btn--sm">Compartilhar</button>
++ return <Sheet onClose={onClose} label="Compartilhar pasta">
++  <div className="sheet-head"><strong>Compartilhar “{folder.name}”</strong><button className="icon-btn" aria-label="Fechar" onClick={onClose}><Icon n="close"/></button></div>
++  <form className="share-form" onSubmit={add}>
++   <input className="input" type="email" required placeholder="E-mail da pessoa" value={email} onChange={e=>setEmail(e.target.value)}/>
++   <select className="input" aria-label="Permissão" value={role} onChange={e=>setRole(e.target.value)}><option value="viewer">Leitor</option><option value="editor">Editor</option></select>
++   <button className="btn btn--primary">Convidar</button>
+   </form>
+   {list.length===0&&<p className="empty">Esta pasta ainda é só sua.</p>}
+-  {list.map(s=><div className="task" key={s.user_id}><span className="t">{s.email} <small className="kind">{s.role==='editor'?'editor':'leitor'}</small></span><button className="btn btn--ghost btn--sm danger" onClick={()=>remove(s.user_id)}>Remover acesso</button></div>)}
+-  <div className="row" style={{marginTop:'1rem'}}><button className="btn btn--ghost btn--sm" onClick={onClose}>Fechar</button></div>
+- </div></div>
++  {list.map(s=><div className="person" key={s.user_id}><span className="t">{s.email} <small className="kind">{s.role==='editor'?'editor':'leitor'}</small></span><button className="btn btn--ghost btn--sm danger" onClick={()=>remove(s.user_id)}>Remover</button></div>)}
++ </Sheet>
+ }
+diff --git a/src/Sheet.jsx b/src/Sheet.jsx
+new file mode 100644
+index 0000000..68e88b6
+--- /dev/null
++++ b/src/Sheet.jsx
+@@ -0,0 +1,10 @@
++import {useEffect} from 'react'
++export default function Sheet({onClose,children,wide,label}){
++ useEffect(()=>{
++  const k=e=>{if(e.key==='Escape')onClose()}
++  addEventListener('keydown',k)
++  const o=document.body.style.overflow;document.body.style.overflow='hidden'
++  return()=>{removeEventListener('keydown',k);document.body.style.overflow=o}
++ },[onClose])
++ return <div className="modal" onClick={onClose}><div className={'sheet'+(wide?' sheet--wide':'')} role="dialog" aria-modal="true" aria-label={label} onClick={e=>e.stopPropagation()}><span className="grab"/>{children}</div></div>
++}
+diff --git a/src/styles.css b/src/styles.css
+index 983d07e..1c496ff 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -1,121 +1,220 @@
+-/* Visual estilo Notion sobre os tokens do design system (ds/tokens.css) */
+-:root{--bg:#fff}
+-body{background:#fff}
+-input,select,textarea,.input{font-size:16px}
+-.btn{height:32px;padding:0 12px;border-radius:6px;font-weight:500;box-shadow:none}
+-.btn--sm{height:30px;padding:0 10px}
+-.btn--ghost{box-shadow:inset 0 0 0 1px var(--border)}
+-.btn--ghost:hover{background:var(--surface-2)}
+-.input{height:36px;border-radius:6px;border-color:var(--border);padding:0 var(--sp-3)}
+-.card{border-radius:8px;box-shadow:none;border:1px solid var(--border);padding:var(--sp-4)}
+-.badge{height:20px;border-radius:4px;font-weight:500}
+-.segmented{border-radius:6px;padding:2px;flex:0 0 auto}
+-.segmented button{height:28px;border-radius:5px;padding:0 var(--sp-3)}
+-.segmented button[aria-pressed="true"]{background:#fff;color:var(--text);box-shadow:var(--shadow)}
+-@media(pointer:coarse){.btn,.nav-i{min-height:40px}.segmented button{height:34px}}
++/* cashIncasa — feed estilo Pinterest · Material Design 3 · toques de glassmorfismo
++   Cores: tokens de ds/tokens.css (verde-escuro, verde-limão, menta, lilás, areia, rosa) */
++:root{
++  --bg:#fff;
++  --font-display:"Bricolage Grotesque","Inter",system-ui,sans-serif;
++  --font-ui:"Inter",system-ui,sans-serif;
++  --ink:#103024;
++  --rail-w:88px;
++  --glass:rgba(255,255,255,.72);
++  --glass-line:rgba(16,48,36,.08);
++  --e1:0 1px 2px rgba(16,48,36,.08),0 1px 3px rgba(16,48,36,.06);
++  --e2:0 2px 6px rgba(16,48,36,.1),0 8px 20px rgba(16,48,36,.08);
++  --e3:0 8px 16px rgba(16,48,36,.12),0 24px 48px rgba(16,48,36,.16);
++}
++html{-webkit-text-size-adjust:100%}
++body{background:#fff;font-family:var(--font-ui);font-size:15px;line-height:1.5;color:var(--text)}
++input,select,textarea,button{font-family:inherit}
++input,select,textarea{font-size:16px}
++:focus-visible{outline:2px solid var(--green-strong);outline-offset:2px;box-shadow:none}
++.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+ 
+-.shell{display:grid;grid-template-columns:256px minmax(0,1fr);min-height:100dvh}
+-.mbar,.scrim{display:none}
+-.sidebar{position:sticky;top:0;height:100dvh;overflow-y:auto;background:var(--surface-2);border-right:1px solid var(--border);padding:var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:2px}
+-.ws{padding:6px 8px 12px}
+-.brand{font:700 var(--fs-lg)/1 var(--font-display);display:flex;align-items:center;gap:var(--sp-2)}
+-.brand b{background:var(--green);color:var(--green-dark);padding:3px 5px;border-radius:6px}
+-.nav-i{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:32px;border:0;background:transparent;padding:5px 8px;border-radius:6px;font:500 14px/1.3 var(--font-ui);color:var(--text);text-align:left;cursor:pointer}
+-.nav-i:hover{background:rgba(16,48,36,.06)}
+-.nav-i[aria-current="page"]{background:rgba(16,48,36,.1);font-weight:600}
+-.nav-i .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+-.nav-i .role{font-size:var(--fs-xs);color:var(--text-soft)}
+-.sec{display:flex;justify-content:space-between;align-items:center;padding:14px 8px 4px;font-size:var(--fs-xs);font-weight:500;color:var(--text-soft)}
+-.sec button{border:0;background:none;cursor:pointer;font-size:20px;line-height:1;color:var(--text-soft);border-radius:4px;width:28px;height:28px}
+-.sec button:hover{background:rgba(16,48,36,.08)}
+-.foot{margin-top:auto;padding:var(--sp-3) 8px 0;border-top:1px solid var(--border);display:flex;align-items:center;gap:var(--sp-2)}
+-.foot .avatar{width:28px;height:28px;flex:none;font-size:var(--fs-xs)}
+-.foot .e{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-xs);color:var(--text-muted)}
++/* glass */
++.glass{background:var(--glass);-webkit-backdrop-filter:blur(18px) saturate(170%);backdrop-filter:blur(18px) saturate(170%)}
++@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.glass{background:rgba(255,255,255,.97)}}
+ 
+-.content{min-width:0}
+-.page{max-width:920px;margin:0 auto;padding:56px 32px 96px;display:grid;gap:var(--sp-4)}
+-.page-title{font:700 40px/1.15 var(--font-ui);letter-spacing:-.02em;overflow-wrap:anywhere}
+-.head{display:flex;gap:var(--sp-3);align-items:center;justify-content:space-between;flex-wrap:wrap}
+-.row{display:flex;gap:var(--sp-2);flex-wrap:wrap;margin-bottom:var(--sp-2)}.row>*{flex:1;min-width:140px}
+-.row>.btn{flex:0 0 auto}
+-.toolbar{display:flex;gap:var(--sp-2);align-items:center}.toolbar .input{flex:1;min-width:0}
+-textarea.input{height:auto;padding:var(--sp-3);resize:vertical}
+-.kind{font-size:var(--fs-xs);color:var(--text-muted)}
+-.empty{color:var(--text-muted);padding:var(--sp-4) 0}
++/* ---------- componentes (Material 3) ---------- */
++.btn{height:40px;padding:0 20px;border-radius:20px;font:600 14px/1 var(--font-ui);gap:8px;box-shadow:none;white-space:nowrap;text-decoration:none;transition:background .15s,box-shadow .15s}
++.btn--sm{height:34px;padding:0 14px;font-size:13px;border-radius:17px}
++.btn--lg{height:48px;border-radius:24px;font-size:15px}
++.btn--primary{background:var(--ink);color:#fff}
++.btn--primary:hover{background:#0b2219;box-shadow:var(--e1)}
++.btn--tonal{background:var(--green-light);color:var(--ink)}
++.btn--tonal:hover{background:#A9DE90}
++.btn--ghost{background:transparent;box-shadow:inset 0 0 0 1px var(--gray-1);color:var(--text)}
++.btn--ghost:hover{background:rgba(16,48,36,.05)}
++.btn.danger{color:var(--danger)}
++.icon-btn{display:inline-grid;place-items:center;width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--text);cursor:pointer;flex:none}
++.icon-btn:hover{background:rgba(16,48,36,.08)}
++.icon-btn.danger{color:var(--danger)}.icon-btn.danger:hover{background:var(--danger-bg)}
++.input{height:48px;border-radius:14px;border:1px solid var(--gray-1);padding:0 16px;background:#fff;width:100%;min-width:0;color:var(--text)}
++.input:focus{outline:none;border-color:var(--green-strong);box-shadow:0 0 0 3px rgba(65,214,0,.25)}
++textarea.input{height:auto;padding:12px 16px;line-height:1.45;resize:vertical}
++.badge{height:26px;padding:0 12px;border-radius:13px;font:600 12px/1 var(--font-ui)}
++.link{border:0;background:none;color:var(--info);text-decoration:underline;cursor:pointer;padding:0;font:inherit}
+ .danger{color:var(--danger)}
+-.link{border:0;background:none;color:var(--info);text-decoration:underline;cursor:pointer;padding:0 var(--sp-1)}
++.kind{font-size:12px;color:var(--text-muted)}
++.empty{color:var(--text-muted)}
++.hint{font-size:12px;color:var(--text-muted)}
++.avatar{background:var(--green);color:var(--ink);font-weight:700}
++.avatar--sm{width:32px;height:32px;font-size:13px}
++.avatar--lg{width:48px;height:48px;font-size:18px}
++.tags{display:flex;flex-wrap:wrap;gap:6px}
++.tag{height:26px;display:inline-flex;align-items:center;padding:0 12px;border-radius:13px;background:var(--mint);color:var(--ink);font-size:12px;font-weight:600}
++
++/* ---------- navegação: rail (desktop) e barra inferior (celular) ---------- */
++.app{min-height:100dvh;padding-left:var(--rail-w)}
++.rail{position:fixed;inset:0 auto 0 0;width:var(--rail-w);display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 0;background:#fff;border-right:1px solid var(--border);z-index:30}
++.mark{display:grid;place-items:center;width:44px;height:44px;margin-bottom:12px;border-radius:14px;background:var(--ink);color:var(--green);font:700 20px/1 var(--font-display);letter-spacing:-.03em}
++.rail .spacer{flex:1}
++.nb{display:grid;justify-items:center;gap:4px;width:100%;border:0;background:none;padding:4px 0;color:var(--text-muted);font:500 12px/1 var(--font-ui);cursor:pointer}
++.nb .ind{display:grid;place-items:center;width:56px;height:32px;border-radius:16px;transition:background .2s}
++.nb:hover .ind{background:rgba(16,48,36,.07)}
++.nb[aria-current="page"]{color:var(--ink);font-weight:700}
++.nb[aria-current="page"] .ind{background:var(--green-light)}
++.nb--add{color:var(--ink)}
++.nb--add .ind{background:var(--ink);color:var(--green)}
++.nb--add:hover .ind{background:#0b2219}
++.bottombar{display:none}
++
++/* ---------- topo: busca + abas ---------- */
++.top{position:sticky;top:0;z-index:20;padding:14px 24px 0;border-bottom:1px solid var(--glass-line)}
++.wrap{max-width:1440px;margin:0 auto}
++.searchbar{position:relative;display:block;max-width:760px;margin:0 auto}
++.searchbar svg{position:absolute;left:18px;top:50%;translate:0 -50%;color:var(--text-muted);pointer-events:none}
++.searchbar input{width:100%;height:48px;border:0;border-radius:24px;padding:0 20px 0 50px;background:rgba(16,48,36,.07);color:var(--text)}
++.searchbar input:focus{outline:none;background:#fff;box-shadow:0 0 0 2px var(--green-strong),var(--e1)}
++.tabs{display:flex;gap:28px;overflow-x:auto;scrollbar-width:none;margin-top:6px}
++.tabs::-webkit-scrollbar{display:none}
++.tabs button{position:relative;flex:none;display:inline-flex;align-items:center;gap:6px;height:50px;padding:0 2px;border:0;background:none;font:600 16px/1 var(--font-ui);color:var(--text-muted);white-space:nowrap;cursor:pointer}
++.tabs button:hover{color:var(--text)}
++.tabs button[aria-current="page"]{color:var(--ink)}
++.tabs button[aria-current="page"]::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;border-radius:3px 3px 0 0;background:var(--ink)}
++.tabs .tabs-add{color:var(--text-soft);font-weight:500}
++
++/* ---------- feed em masonry ---------- */
++.content{min-width:0}
++.page{max-width:1440px;margin:0 auto;padding:20px 24px 64px}
++.folderbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
++.masonry{columns:2;column-gap:12px}
++.pin{break-inside:avoid;margin:0 0 14px}
++.pin-media{position:relative;display:block;width:100%;padding:0;border:0;border-radius:16px;overflow:hidden;background:var(--surface-2);cursor:pointer;text-align:left;color:inherit;font:inherit;transition:transform .15s}
++.pin-media:active{transform:scale(.985)}
++.pin-media img{display:block;width:100%;height:auto;min-height:96px}
++.tile{display:grid;gap:8px;padding:14px 14px 16px;color:var(--ink)}
++.tile--lilac{background:var(--lilac)}.tile--sand{background:var(--sand)}.tile--mint{background:var(--mint)}.tile--rose{background:var(--rose)}
++.tile .tic{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:rgba(255,255,255,.65)}
++.tile h3{font:700 17px/1.25 var(--font-display);letter-spacing:-.01em;overflow-wrap:anywhere}
++.tile p{font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;color:rgba(16,48,36,.82);display:-webkit-box;-webkit-line-clamp:9;-webkit-box-orient:vertical;overflow:hidden}
++.tile .host{font-size:12px;color:rgba(16,48,36,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
++.playbadge{position:absolute;right:10px;bottom:10px;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.55);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:var(--ink);box-shadow:var(--e1)}
++.pin-foot{display:flex;align-items:flex-start;gap:4px;padding:8px 0 0 4px}
++.pin-t{flex:1;min-width:0;display:grid;gap:2px}
++.pin-title{font:600 14px/1.3 var(--font-ui);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
++.pin-meta{font-size:12px;color:var(--text-muted)}
++.pin-foot .icon-btn{margin:-4px -6px 0 0}
++.emptybox{display:grid;justify-items:center;gap:10px;text-align:center;padding:56px 20px;border-radius:28px;background:var(--mint)}
++.emptybox .ic{display:grid;place-items:center;width:56px;height:56px;border-radius:18px;background:#fff;color:var(--ink)}
++.emptybox h2{font:700 20px/1.3 var(--font-display)}
++.emptybox p{max-width:36ch;color:var(--text-muted);font-size:14px}
++.emptybox .btn{margin-top:6px}
+ 
+-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:var(--sp-3)}
+-.item{padding:0;overflow:hidden;display:flex;flex-direction:column;transition:background .15s}
+-.item:hover{background:var(--surface-2)}
+-.item img{width:100%;aspect-ratio:16/9;object-fit:cover}.item iframe{width:100%;aspect-ratio:9/12;border:0}
+-.item .in{padding:var(--sp-3) var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-2);flex:1;min-width:0}
+-.item .t-h3{overflow-wrap:anywhere}
+-.item .acts{margin-top:auto;display:flex;gap:var(--sp-1);flex-wrap:wrap}.item .acts a{text-decoration:none}
+-.item pre{white-space:pre-wrap;margin:0;font:inherit;font-size:var(--fs-sm);overflow-wrap:anywhere}
+-.grid.list{grid-template-columns:1fr;gap:var(--sp-2)}
+-.grid.list .item{flex-direction:row}
+-.grid.list .item img{width:150px;aspect-ratio:16/10;flex:none;height:auto}
+-.grid.list .item:has(iframe){flex-direction:column}
++/* ---------- sheets e menus (vidro) ---------- */
++.modal{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:rgba(16,48,36,.38);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:fade .15s ease-out}
++.sheet{position:relative;width:min(480px,100%);max-height:92dvh;overflow:auto;display:grid;gap:12px;align-content:start;padding:24px;border-radius:28px;background:rgba(255,255,255,.88);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,.65);box-shadow:var(--e3)}
++.sheet--wide{width:min(560px,100%);padding:0 0 22px;gap:0}
++.grab{display:none}
++.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
++.sheet-head strong{font:700 20px/1.2 var(--font-display);letter-spacing:-.01em;overflow-wrap:anywhere}
++.x{position:absolute;top:12px;right:12px;z-index:3;display:grid;place-items:center;width:40px;height:40px;border:0;border-radius:50%;cursor:pointer;color:var(--ink);box-shadow:var(--e1)}
++.mi{display:flex;align-items:center;gap:16px;width:100%;min-height:52px;padding:0 14px;border:0;border-radius:16px;background:transparent;color:var(--text);font:500 15px/1.2 var(--font-ui);text-align:left;text-decoration:none;cursor:pointer}
++.mi:hover{background:rgba(16,48,36,.07)}
++.mi.danger{color:var(--danger)}
++.prof{display:flex;align-items:center;gap:14px;padding:4px 6px 10px}
++.prof div{display:grid;min-width:0}.prof .kind{overflow:hidden;text-overflow:ellipsis}
++.dimg{display:block;width:100%;max-height:60dvh;object-fit:cover;background:var(--surface-2)}
++.dframe{display:block;width:100%;aspect-ratio:9/12;max-height:68dvh;border:0;background:#000}.dframe.wide{aspect-ratio:16/9}
++.dbody{display:grid;gap:12px;padding:18px 22px 4px}
++.dtitle{font:700 22px/1.2 var(--font-display);letter-spacing:-.015em;overflow-wrap:anywhere}
++.dtext{white-space:pre-wrap;margin:0;font:inherit;font-size:15px;line-height:1.55;color:var(--text);overflow-wrap:anywhere}
++.dacts{display:flex;flex-wrap:wrap;gap:8px;padding-top:6px}
++.sheet--wide>.kind{padding:0}
++.fgrid{display:grid;gap:12px}
++.frow{display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px}
++.share-form{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;gap:10px}
++.person{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--glass-line)}
++.person .t{flex:1;min-width:0;overflow-wrap:anywhere}
++@keyframes fade{from{opacity:0}}
++@keyframes up{from{transform:translateY(40px);opacity:.4}}
+ 
+-.task{display:flex;gap:var(--sp-3);align-items:center;padding:var(--sp-3) 0;border-bottom:1px solid var(--border)}
+-.task .t{flex:1;min-width:0;overflow-wrap:anywhere}.task.done .t{text-decoration:line-through;color:var(--text-soft)}
+-.task select{width:150px}
+-.st{border:0;cursor:pointer;min-width:76px;justify-content:center}
++/* ---------- planos ---------- */
++.narrow{max-width:880px;margin:0 auto;padding:32px 24px 64px;display:grid;gap:16px;align-content:start}
++.head{display:flex;gap:12px 16px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
++.page-title{font:700 34px/1.1 var(--font-display);letter-spacing:-.025em;overflow-wrap:anywhere}
++.sub{font-size:14px;color:var(--text-muted);margin-top:6px}
++.narrow .card{background:#fff;border:1px solid var(--border);border-radius:24px;padding:20px;box-shadow:var(--e1)}
++.t-title{font:700 22px/1.2 var(--font-display)}
++.plans-row{display:flex;gap:8px;flex-wrap:wrap}.plans-row .btn{flex:0 0 auto}
++.progress{height:8px;margin:2px 0 6px;border-radius:4px}
++.task{display:grid;grid-template-columns:auto minmax(0,1fr) 160px auto;gap:10px 12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}
++.task:last-child{border-bottom:0}
++.task .t{min-width:0;overflow-wrap:anywhere;font-weight:500}
++.task .t small{display:block;margin-top:2px;font-weight:400}
++.task.done .t>span:first-child{text-decoration:line-through;color:var(--text-soft)}
++.task .attach{width:100%;height:40px;font-size:14px;grid-column:3;grid-row:1}
++.task>.icon-btn{grid-column:4;grid-row:1}
++.task .t a{color:var(--info);font-size:12px;font-weight:400;text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
++.st{border:0;cursor:pointer;min-width:80px;justify-content:center;height:28px}
+ .st.todo{background:var(--surface-2);color:var(--text-muted)}
+ .st.doing{background:var(--warning-bg);color:var(--warning)}
+ .st.done{background:var(--success-bg);color:var(--success)}
+-.modal{position:fixed;inset:0;background:rgba(16,48,36,.5);display:grid;place-items:center;padding:var(--sp-4);z-index:40}
+-.modal .card{width:min(480px,100%);max-height:90dvh;overflow:auto;padding:var(--sp-5)}
+-.auth{max-width:400px;margin:12vh auto 0;display:grid;gap:var(--sp-3);padding:var(--sp-5)}
+-.auth .brand{font-size:var(--fs-xl)}
++.addtask{display:grid;grid-template-columns:minmax(0,1fr) 170px auto;gap:10px;margin:14px 0 6px}
+ 
+-@media(max-width:860px){
+- .shell{display:block}
+- .mbar{display:flex;align-items:center;gap:var(--sp-3);position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--border);padding:8px 12px;padding-top:calc(8px + env(safe-area-inset-top))}
+- .mtitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+- .sidebar{position:fixed;inset:0 auto 0 0;width:min(84vw,300px);z-index:30;transform:translateX(-100%);transition:transform .2s;padding-top:calc(var(--sp-3) + env(safe-area-inset-top))}
+- .sidebar.open{transform:none;box-shadow:0 0 40px rgba(0,0,0,.25)}
+- .scrim{display:block;position:fixed;inset:0;background:rgba(16,48,36,.4);z-index:25}
+- .page{padding:20px 16px calc(80px + env(safe-area-inset-bottom))}
+- .page-title{font-size:30px}
+- .row>*{min-width:0;flex:1 1 100%}.row>.btn{flex:1 1 auto}
+- .row select{max-width:none!important}
+- .grid{grid-template-columns:1fr}
+- .grid.list .item img{width:104px}
+- .task{flex-wrap:wrap}.task .t{flex:1 1 calc(100% - 100px);order:2}.task .st{order:1}.task select{width:100%;order:3}.task .btn{order:4}
+- .auth{margin:6vh 16px 0}
+-}
+-@media(prefers-reduced-motion:reduce){.sidebar{transition:none}}
++/* ---------- login ---------- */
++.auth-wrap{min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}
++.brand{display:flex;align-items:center;gap:2px;font:700 22px/1 var(--font-display);letter-spacing:-.02em}
++.brand b{background:var(--green);color:var(--ink);padding:3px 6px 4px;border-radius:8px;margin:0 1px}
++.auth-hero{background:var(--ink);color:#fff;padding:56px;display:flex;flex-direction:column;justify-content:space-between;gap:40px}
++.auth-hero .brand{font-size:26px;color:#fff}
++.auth-hero h1{font:700 clamp(34px,4.2vw,56px)/1.04 var(--font-display);letter-spacing:-.03em;max-width:13ch}
++.auth-hero p{color:#B7D0C3;max-width:40ch;margin-top:16px;font-size:17px;line-height:1.5}
++.auth-hero ul{list-style:none;margin:0;padding:0;display:grid;gap:10px;color:#CFE3D8;font-size:14px}
++.auth-hero li{display:flex;align-items:center;gap:10px}.auth-hero li svg{color:var(--green);flex:none}
++.auth-form{align-self:center;justify-self:center;width:min(400px,100% - 48px);display:grid;gap:14px;padding:32px 0}
++.auth-form h2{font:700 26px/1.15 var(--font-display);letter-spacing:-.02em}
++.auth-form label{display:grid;gap:6px;font-size:13px;font-weight:500}
++.auth-form .btn{height:48px;width:100%;border-radius:24px}
++.auth-err{background:var(--danger-bg);color:var(--danger);border-radius:14px;padding:10px 12px;font-size:14px}
++.auth-switch{text-align:center;font-size:14px;color:var(--text-muted)}
+ 
+-/* ===== Mobile: barra inferior, chips, botão + e folha de cadastro ===== */
+-.fab,.tabbar,.chips,.sheet-head,.sheet-scrim{display:none}
+-.item iframe{max-height:75dvh}.item iframe.wide{aspect-ratio:16/9}
++@media(min-width:640px){.masonry{columns:3;column-gap:16px}.pin{margin-bottom:18px}}
++@media(min-width:960px){.masonry{columns:4}}
++@media(min-width:1280px){.masonry{columns:5}}
++@media(pointer:coarse){.btn{min-height:44px}.icon-btn{width:40px;height:40px}}
++
++@media(max-width:960px){
++  .auth-wrap{grid-template-columns:1fr}
++  .auth-hero{padding:28px 24px;gap:20px}
++  .auth-hero h1{font-size:32px;max-width:none}.auth-hero p{font-size:15px;margin-top:10px}.auth-hero ul{display:none}
++  .auth-form{padding:28px 0 48px}
++}
++/* ---------- celular ---------- */
+ @media(max-width:860px){
+- button,a,input,select,textarea{touch-action:manipulation}
+- body{-webkit-tap-highlight-color:transparent}
+- .mbar{justify-content:center;padding-top:calc(10px + env(safe-area-inset-top))}
+- .mtitle{flex:none;max-width:80%;text-align:center}
+- .page{padding:12px 14px calc(150px + env(safe-area-inset-bottom));gap:var(--sp-3)}
+- .page-title{font-size:26px}
+- .chips{display:flex;gap:8px;overflow-x:auto;margin:0 -14px;padding:2px 14px;scrollbar-width:none}
+- .chips::-webkit-scrollbar{display:none}
+- .chips button{flex:0 0 auto;height:34px;padding:0 14px;border:0;border-radius:999px;background:var(--surface-2);font:500 14px/1 var(--font-ui);color:var(--text);white-space:nowrap;cursor:pointer}
+- .chips button[aria-current="page"]{background:var(--green-dark);color:var(--green)}
+- .tabbar{display:grid;grid-template-columns:repeat(3,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;background:#fff;border-top:1px solid var(--border);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+- .tabbar button{display:grid;justify-items:center;gap:2px;border:0;background:none;padding:6px;border-radius:10px;min-height:48px;font:500 11px/1.2 var(--font-ui);color:var(--text-muted);cursor:pointer}
+- .tabbar button span:first-child{font-size:20px}
+- .tabbar button[aria-current="page"]{color:var(--green-dark);font-weight:700}
+- .fab{display:grid;place-items:center;position:fixed;right:16px;bottom:calc(76px + env(safe-area-inset-bottom));width:56px;height:56px;border:0;border-radius:50%;background:var(--green-dark);color:var(--green);font-size:30px;line-height:1;box-shadow:0 6px 20px rgba(16,48,36,.35);z-index:21;cursor:pointer}
+- .addform{display:none}
+- .addform.open{display:block;position:fixed;left:0;right:0;bottom:0;z-index:36;max-height:90dvh;overflow:auto;border:0;border-radius:16px 16px 0 0;background:#fff;padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+- .sheet-scrim{display:block;position:fixed;inset:0;background:rgba(16,48,36,.4);z-index:35}
+- .sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+- .modal{place-items:end center;padding:0}.modal .card{width:100%;max-height:88dvh;border-radius:16px 16px 0 0}
+- .sidebar{z-index:45}.scrim{z-index:44}
+- .item .in{padding:10px 12px}.item .acts .btn{height:34px}
+- .grid.list .item img{width:96px;aspect-ratio:1/1;object-fit:cover}
+- .grid.list .item .t-h3{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+- .plans-row{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.plans-row>*{flex:0 0 auto}
+- .toolbar .segmented button{padding:0 10px}
++  button,a,input,select,textarea{touch-action:manipulation}
++  body{-webkit-tap-highlight-color:transparent}
++  .app{padding-left:0}
++  .rail{display:none}
++  .bottombar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:30;padding:8px 2px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--glass-line)}
++  .nb{padding:0}
++  .top{padding:calc(10px + env(safe-area-inset-top)) 12px 0}
++  .searchbar input{height:44px}
++  .tabs{gap:22px;margin:4px -12px 0;padding:0 12px}
++  .tabs button{height:46px;font-size:15px}
++  .page{padding:12px 12px calc(110px + env(safe-area-inset-bottom))}
++  .narrow{padding:calc(20px + env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom))}
++  .page-title{font-size:26px}
++  .modal{place-items:end center;padding:0}
++  .sheet{width:100%;border-radius:28px 28px 0 0;padding:10px 16px calc(20px + env(safe-area-inset-bottom));max-height:92dvh;animation:up .24s ease-out}
++  .grab{display:block;width:36px;height:4px;border-radius:2px;background:rgba(16,48,36,.22);margin:0 auto 6px}
++  .sheet--wide{padding:0 0 calc(16px + env(safe-area-inset-bottom));width:100%}
++  .sheet--wide .grab{position:absolute;top:8px;left:50%;translate:-50% 0;z-index:3;background:rgba(255,255,255,.85)}
++  .dbody{padding:16px 18px 4px}
++  .dacts .btn{flex:1 1 auto}
++  .frow{grid-template-columns:1fr}
++  .share-form{grid-template-columns:1fr 1fr}.share-form input{grid-column:1/-1}
++  .task{grid-template-columns:auto minmax(0,1fr) auto}
++  .task .attach{grid-column:1/-1;grid-row:2}.task>.icon-btn{grid-column:3;grid-row:1}
++  .addtask{grid-template-columns:1fr 1fr}.addtask .input:first-child{grid-column:1/-1}
+ }
++@media(max-width:380px){.page-title{font-size:23px}.nb .nl{font-size:11px}}
++@media(prefers-reduced-motion:reduce){.modal,.sheet,.pin-media,.nb .ind{animation:none!important;transition:none!important}}

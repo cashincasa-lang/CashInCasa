@@ -1,5 +1,7 @@
 import {useEffect,useState,useCallback} from 'react'
 import {supabase} from './supabase'
+import Icon from './Icon'
+import Sheet from './Sheet'
 export function detect(url){
  let u;try{u=new URL(url)}catch{return {platform:'site'}}
  const h=u.hostname.replace('www.','')
@@ -13,6 +15,8 @@ export function detect(url){
  return {platform:'site'}
 }
 const KIND={link:'Link',note:'Nota',prompt:'Prompt',idea:'Ideia'}
+const KICON={link:'link',note:'note',prompt:'prompt',idea:'idea'}
+const PLAT={youtube:'YouTube',tiktok:'TikTok',instagram:'Instagram',kwai:'Kwai',site:'Site'}
 let pending=(()=>{
  const q=new URLSearchParams(location.search)
  if(!q.get('url')&&!q.get('text')&&!q.get('title'))return null
@@ -23,18 +27,19 @@ let pending=(()=>{
  return {type:'link',url:m[0],title,content:raw.replace(m[0],'').trim()}
 })()
 const empty={type:'link',url:'',title:'',content:'',tags:'',thumb:'',platform:''}
-export default function Items({user,folder,role}){
- const [adding,setAdding]=useState(()=>!!pending)
- const [items,setItems]=useState([]),[q,setQ]=useState(''),[open,setOpen]=useState(null),[f,setF]=useState(()=>{const p=pending;pending=null;return p?{...empty,...p}:empty})
+const TILE={link:'lilac',note:'sand',prompt:'mint',idea:'rose'}
+const host=u=>{try{return new URL(u).hostname.replace('www.','')}catch{return ''}}
+export default function Items({user,folder,role,q,addTick}){
+ const [adding,setAdding]=useState(()=>!!pending||addTick>0)
+ const [items,setItems]=useState([]),[open,setOpen]=useState(null),[menu,setMenu]=useState(null),[play,setPlay]=useState(false),[f,setF]=useState(()=>{const p=pending;pending=null;return p?{...empty,...p}:empty})
  const canEdit=!folder||role!=='viewer'
- const [mode,setMode]=useState(()=>{try{return localStorage.getItem('vm')||(matchMedia('(max-width:860px)').matches?'list':'grid')}catch{return 'grid'}})
- const pick=m=>{setMode(m);try{localStorage.setItem('vm',m)}catch{}}
  const load=useCallback(async()=>{
   let qy=supabase.from('items').select('*').order('created_at',{ascending:false})
   qy=folder?qy.eq('folder_id',folder.id):qy.eq('owner_id',user.id)
   const {data}=await qy;setItems(data||[])
  },[folder?.id,user.id])
  useEffect(()=>{load()},[load])
+ useEffect(()=>{if(addTick)setAdding(true)},[addTick])
  const set=k=>e=>setF({...f,[k]:e.target.value})
  const preview=async()=>{
   if(f.type!=='link'||!f.url)return
@@ -52,47 +57,75 @@ export default function Items({user,folder,role}){
   if(error)return alert(error.message)
   setF({...f,url:'',title:'',content:'',tags:'',thumb:'',platform:''});setAdding(false);load()
  }
- const del=async i=>{if(confirm('Excluir este item?')){await supabase.from('items').delete().eq('id',i.id);load()}}
+ const closeAll=()=>{setOpen(null);setMenu(null);setPlay(false)}
+ const del=async i=>{if(confirm('Excluir este item?')){await supabase.from('items').delete().eq('id',i.id);closeAll();load()}}
  const keep=async i=>{
   const {id,owner_id,folder_id,created_at,...rest}=i
   const {error}=await supabase.from('items').insert({...rest,copied_from:id,folder_id:null})
   alert(error?error.message:'Salvo na sua biblioteca.')
  }
- const shown=items.filter(i=>[i.title,i.content,i.url,...i.tags].join(' ').toLowerCase().includes(q.toLowerCase()))
+ const actions=i=>[
+  i.url&&{k:'open',icon:'out',label:'Abrir original',href:i.url},
+  i.content&&{k:'copy',icon:'copy',label:'Copiar texto',run:()=>navigator.clipboard.writeText(i.content)},
+  i.owner_id!==user.id&&{k:'keep',icon:'save',label:'Salvar na minha biblioteca',run:()=>keep(i)},
+  (i.owner_id===user.id||role==='owner')&&{k:'del',icon:'trash',label:'Excluir',danger:true,run:()=>del(i)}
+ ].filter(Boolean)
+ const term=(q||'').toLowerCase()
+ const shown=items.filter(i=>[i.title,i.content,i.url,...(i.tags||[])].join(' ').toLowerCase().includes(term))
+ const cur=items.find(i=>i.id===open),mi=items.find(i=>i.id===menu)
+ const dc=cur?.url?detect(cur.url):{}
  return <>
-  {canEdit&&<button className="fab" aria-label="Novo item" onClick={()=>setAdding(true)}>+</button>}
-  {canEdit&&adding&&<div className="sheet-scrim" onClick={()=>setAdding(false)}/>}
-  {canEdit&&<form className={'card addform'+(adding?' open':'')} onSubmit={save}>
-   <div className="sheet-head"><strong>Novo item</strong><button type="button" className="btn btn--ghost btn--sm" onClick={()=>setAdding(false)}>Fechar</button></div>
-   <div className="row">
-    <select className="input" value={f.type} onChange={set('type')} style={{maxWidth:160}}>{Object.entries(KIND).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
-    {f.type==='link'&&<input className="input" required placeholder="Cole o link (YouTube, TikTok, Instagram, Kwai ou site)" value={f.url} onChange={set('url')} onBlur={preview} style={{flex:3}}/>}
-    <input className="input" placeholder="Título" value={f.title} onChange={set('title')} style={{flex:2}}/>
-   </div>
-   {f.type!=='link'&&<div className="row"><textarea className="input" required rows={4} placeholder={f.type==='prompt'?'Escreva o prompt':'Escreva aqui'} value={f.content} onChange={set('content')}/></div>}
-   {f.type==='link'&&<div className="row"><textarea className="input" rows={2} placeholder="Anotação sobre este link (opcional)" value={f.content} onChange={set('content')}/></div>}
-   <div className="row"><input className="input" placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/><button className="btn btn--primary btn--sm" style={{flex:'0 0 auto'}}>Salvar</button></div>
-  </form>}
-  <div className="toolbar"><input className="input" placeholder="Buscar por título, texto ou tag" value={q} onChange={e=>setQ(e.target.value)}/><div className="segmented" role="group" aria-label="Visualização"><button type="button" aria-pressed={mode==='grid'} onClick={()=>pick('grid')}>Galeria</button><button type="button" aria-pressed={mode==='list'} onClick={()=>pick('list')}>Lista</button></div></div>
-  {shown.length===0&&<p className="empty">{items.length?'Nada encontrado para essa busca.':'Nenhum item ainda. Cole um link ou escreva uma nota acima.'}</p>}
-  <div className={'grid '+(mode==='list'?'list':'')}>{shown.map(i=>{
-   const d=i.url?detect(i.url):{},mine=i.owner_id===user.id
-   return <div className="card item" key={i.id}>
-    {open===i.id&&d.embed?<iframe className={d.platform==='youtube'?'wide':''} src={d.embed} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title={i.title||'vídeo'}/>:i.thumbnail&&<img src={i.thumbnail} alt="" loading="lazy"/>}
-    <div className="in">
-     <span className="kind">{KIND[i.type]}{i.platform?` · ${i.platform}`:''}</span>
-     {i.title&&<h3 className="t-h3">{i.title}</h3>}
-     {i.content&&<pre>{i.content}</pre>}
-     {open===i.id&&i.url&&!d.embed&&<span className="kind">Esta plataforma não permite player dentro do app. Use “Abrir original”.</span>}
-     <div>{i.tags.map(t=><span className="badge badge--success" key={t}>{t}</span>)}</div>
-     <div className="acts">
-      {d.embed&&<button className="btn btn--ghost btn--sm" onClick={()=>setOpen(open===i.id?null:i.id)}>{open===i.id?'Fechar vídeo':'Assistir aqui'}</button>}
-      {i.url&&<a href={i.url} target="_blank" rel="noreferrer"><button className="btn btn--ghost btn--sm">Abrir original</button></a>}
-      {(i.type==='prompt'||i.type==='note'||i.type==='idea')&&<button className="btn btn--ghost btn--sm" onClick={()=>navigator.clipboard.writeText(i.content||'')}>Copiar</button>}
-      {!mine&&<button className="btn btn--ghost btn--sm" onClick={()=>keep(i)}>Salvar na minha biblioteca</button>}
-      {(mine||role==='owner')&&<button className="btn btn--ghost btn--sm danger" onClick={()=>del(i)}>Excluir</button>}
-     </div>
+  {shown.length===0&&<div className="emptybox"><span className="ic"><Icon n={items.length?'search':'inbox'} size={26}/></span><h2>{items.length?'Nada encontrado':'Sua biblioteca está vazia'}</h2><p>{items.length?'Tente outra palavra, ou busque por uma tag.':'Cole um link de vídeo, escreva uma ideia ou guarde um prompt para começar.'}</p>{!items.length&&canEdit&&<button className="btn btn--primary" onClick={()=>setAdding(true)}><Icon n="plus" size={16}/>Adicionar o primeiro item</button>}</div>}
+  <div className="masonry">{shown.map(i=>{
+   const d=i.url?detect(i.url):{},tile=!i.thumbnail,plat=i.platform&&i.platform!=='site'?(PLAT[i.platform]||i.platform):''
+   return <article className="pin" key={i.id}>
+    <button className="pin-media" onClick={()=>{setOpen(i.id);setPlay(false)}} aria-label={'Abrir '+(i.title||KIND[i.type])}>
+     {tile?<div className={'tile tile--'+TILE[i.type]}>
+       <span className="tic"><Icon n={KICON[i.type]} size={18}/></span>
+       {i.title&&<h3>{i.title}</h3>}
+       {i.content&&<p>{i.content}</p>}
+       {i.url&&<span className="host">{host(i.url)}</span>}
+      </div>:<img src={i.thumbnail} alt="" loading="lazy"/>}
+     {d.embed&&<span className="playbadge"><Icon n="play" size={18}/></span>}
+    </button>
+    <div className="pin-foot">
+     <div className="pin-t">{!tile&&i.title&&<p className="pin-title">{i.title}</p>}<span className="pin-meta">{KIND[i.type]}{plat?` · ${plat}`:''}</span></div>
+     <button className="icon-btn" aria-label="Mais ações" onClick={()=>setMenu(i.id)}><Icon n="more"/></button>
     </div>
-   </div>})}</div>
+   </article>})}</div>
+
+  {mi&&<Sheet onClose={()=>setMenu(null)} label="Ações do item">
+   {actions(mi).map(a=>a.href?<a key={a.k} className="mi" href={a.href} target="_blank" rel="noreferrer" onClick={()=>setMenu(null)}><Icon n={a.icon}/>{a.label}</a>:<button key={a.k} className={'mi'+(a.danger?' danger':'')} onClick={()=>{a.run();if(!a.danger)setMenu(null)}}><Icon n={a.icon}/>{a.label}</button>)}
+  </Sheet>}
+
+  {cur&&<Sheet wide onClose={closeAll} label="Detalhes do item">
+   <button className="x glass" aria-label="Fechar" onClick={closeAll}><Icon n="close"/></button>
+   {play&&dc.embed?<iframe className={'dframe'+(dc.platform==='youtube'?' wide':'')} src={dc.embed} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title={cur.title||'vídeo'}/>:cur.thumbnail?<img className="dimg" src={cur.thumbnail} alt=""/>:null}
+   <div className="dbody">
+    <span className="kind">{KIND[cur.type]}{cur.platform&&cur.platform!=='site'?` · ${PLAT[cur.platform]||cur.platform}`:''}</span>
+    {cur.title&&<h2 className="dtitle">{cur.title}</h2>}
+    {cur.content&&<pre className="dtext">{cur.content}</pre>}
+    {play&&cur.url&&!dc.embed&&<span className="hint">Esta plataforma não permite player dentro do app. Use “Abrir original”.</span>}
+    {cur.tags?.length>0&&<div className="tags">{cur.tags.map(t=><span className="tag" key={t}>{t}</span>)}</div>}
+    <div className="dacts">
+     {dc.embed&&<button className="btn btn--primary" onClick={()=>setPlay(!play)}><Icon n={play?'close':'play'} size={16}/>{play?'Fechar vídeo':'Assistir aqui'}</button>}
+     {actions(cur).map(a=>a.href?<a key={a.k} className="btn btn--ghost" href={a.href} target="_blank" rel="noreferrer"><Icon n={a.icon} size={16}/>{a.label}</a>:<button key={a.k} className={'btn btn--ghost'+(a.danger?' danger':'')} onClick={a.run}><Icon n={a.icon} size={16}/>{a.label}</button>)}
+    </div>
+   </div>
+  </Sheet>}
+
+  {canEdit&&adding&&<Sheet onClose={()=>setAdding(false)} label="Novo item">
+   <form className="fgrid" onSubmit={save}>
+    <div className="sheet-head"><strong>Novo item</strong><button type="button" className="icon-btn" aria-label="Fechar" onClick={()=>setAdding(false)}><Icon n="close"/></button></div>
+    <div className="frow">
+     <select className="input" aria-label="Tipo" value={f.type} onChange={set('type')}>{Object.entries(KIND).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+     {f.type==='link'?<input className="input" required type="url" inputMode="url" placeholder="Cole o link (YouTube, TikTok, Instagram, Kwai…)" value={f.url} onChange={set('url')} onBlur={preview}/>:<input className="input" placeholder="Título" value={f.title} onChange={set('title')}/>}
+    </div>
+    {f.type==='link'&&<input className="input" placeholder="Título (opcional)" value={f.title} onChange={set('title')}/>}
+    <textarea className="input" required={f.type!=='link'} rows={f.type==='link'?2:5} placeholder={f.type==='link'?'Anotação sobre este link (opcional)':f.type==='prompt'?'Escreva o prompt':'Escreva aqui'} value={f.content} onChange={set('content')}/>
+    <input className="input" placeholder="Tags separadas por vírgula" value={f.tags} onChange={set('tags')}/>
+    <button className="btn btn--primary btn--lg">Salvar item</button>
+   </form>
+  </Sheet>}
  </>
 }

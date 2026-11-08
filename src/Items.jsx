@@ -12,7 +12,11 @@ export function detect(url){
   return {platform:'youtube',embed:`https://www.youtube.com/embed/${id}`,thumb:`https://img.youtube.com/vi/${id}/hqdefault.jpg`}
  }
  if(h.includes('tiktok.com')){const m=u.pathname.match(/video\/(\d+)/);return {platform:'tiktok',embed:m?`https://www.tiktok.com/embed/v2/${m[1]}`:null}}
- if(h.includes('instagram.com'))return {platform:'instagram'}
+ if(h.includes('instagram.com')){
+  const parts=u.pathname.split('/').filter(Boolean),i=parts.findIndex(x=>['p','reel','reels','tv'].includes(x)),code=i>=0?parts[i+1]:null
+  if(!code||!/^[\w-]{5,30}$/.test(code))return {platform:'instagram'}
+  return {platform:'instagram',embed:`https://www.instagram.com/${parts[i]==='p'?'p':parts[i]==='tv'?'tv':'reel'}/${code}/embed`}
+ }
  if(h.includes('kwai')||h.includes('kw.ai'))return {platform:'kwai'}
  return {platform:'site'}
 }

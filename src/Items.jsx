@@ -21,6 +21,7 @@ const KICON={link:'link',note:'note',prompt:'prompt',idea:'idea'}
 const PLAT={youtube:'YouTube',tiktok:'TikTok',instagram:'Instagram',kwai:'Kwai',site:'Site'}
 const COVER_BUCKET='item-covers',COVER_PREFIX='storage:item-covers/'
 const storedCoverPath=value=>value?.startsWith(COVER_PREFIX)?value.slice(COVER_PREFIX.length):null
+const AUTO_COVER=['site','tiktok','kwai'] // YouTube já tem miniatura própria; Instagram não tem via oficial
 let pending=(()=>{
  const q=new URLSearchParams(location.search)
  if(!q.get('url')&&!q.get('text')&&!q.get('title'))return null
@@ -89,6 +90,12 @@ export default function Items({user,folder,role,q,addTick,dests,allowNone=true})
   },450)
   return ()=>{clearTimeout(timer);clearTimeout(timeout);controller.abort()}
  },[f.url,f.type])
+ const fetchCover=async(id,manual)=>{
+  const {data,error}=await supabase.functions.invoke('link-cover',{body:{item_id:id}})
+  if(!error&&data?.ok){load();return true}
+  if(manual)alert(error?'Não consegui buscar a capa agora. Tente de novo em instantes.':'Não encontrei uma imagem nesse link. Use Editar para escolher uma foto de capa.')
+  return false
+ }
  const save=async e=>{
   e.preventDefault()
   if(saving)return
@@ -108,12 +115,13 @@ export default function Items({user,folder,role,q,addTick,dests,allowNone=true})
   }else if(removeCover)t=null
   const row={type:f.type,title:ti||null,url:link?(f.url||null):null,content:f.content||null,platform:link?(p||d.platform||null):null,
    thumbnail:t||(link?d.thumb:null)||null,tags:f.tags.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean)}
-  const {error}=editId?await supabase.from('items').update(row).eq('id',editId):await supabase.from('items').insert({...row,folder_id:folder?.id||null})
+  const {data:saved,error}=editId?await supabase.from('items').update(row).eq('id',editId).select('id').maybeSingle():await supabase.from('items').insert({...row,folder_id:folder?.id||null}).select('id').single()
   if(error){if(uploadedCoverPath)await supabase.storage.from(COVER_BUCKET).remove([uploadedCoverPath]);setSaving(false);return alert(error.message)}
   if(oldCoverPath&&(uploadedCoverPath||removeCover)&&oldCoverPath.startsWith(`${user.id}/`)){
    const {data:references,error:referenceError}=await supabase.from('items').select('id').eq('thumbnail',COVER_PREFIX+oldCoverPath).limit(1)
    if(!referenceError&&!references?.length)await supabase.storage.from(COVER_BUCKET).remove([oldCoverPath])
   }
+  if(saved?.id&&link&&!uploadedCoverPath&&!removeCover&&!storedCoverPath(t)&&AUTO_COVER.includes(p||d.platform)&&(!editId||f.url!==orig.current?.url))fetchCover(saved.id,false)
   setCoverFile(null);setRemoveCover(false);setSaving(false)
   setF(editId?empty:{...empty,type:f.type});setAdding(false);setEditId(null);load()
  }
@@ -151,6 +159,7 @@ export default function Items({user,folder,role,q,addTick,dests,allowNone=true})
  }
  const actions=i=>[
   i.url&&{k:'open',icon:'out',label:'Abrir original',href:i.url},
+  canEditItem(i)&&i.owner_id===user.id&&i.type==='link'&&AUTO_COVER.includes(i.platform)&&!storedCoverPath(i.thumbnail)&&{k:'autocover',icon:'link',label:'Buscar capa automática',run:()=>fetchCover(i.id,true)},
   canEditItem(i)&&{k:'edit',icon:'edit',label:'Editar',run:()=>openEdit(i)},
   canEdit&&{k:'dup',icon:'dup',label:'Duplicar',run:()=>duplicate(i)},
   canEditItem(i)&&optsFor(i,'move').length>0&&{k:'move',icon:'move',label:'Mover para…',run:()=>setPicker({item:i,mode:'move'})},

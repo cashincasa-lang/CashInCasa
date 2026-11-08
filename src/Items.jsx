@@ -93,7 +93,7 @@ export default function Items({user,folder,role,q,addTick,dests,allowNone=true})
  const fetchCover=async(id,manual)=>{
   const {data,error}=await supabase.functions.invoke('link-cover',{body:{item_id:id}})
   if(!error&&data?.ok){load();return true}
-  if(manual)alert(error?'Não consegui buscar a capa agora. Tente de novo em instantes.':'Não encontrei uma imagem nesse link. Use Editar para escolher uma foto de capa.')
+  if(manual)alert(error?(error.context?.status===404?'A função link-cover ainda não foi publicada no Supabase.':'Não consegui buscar a capa agora. Tente de novo em instantes.'):'Não encontrei uma imagem nesse link. Use Editar para escolher uma foto de capa.')
   return false
  }
  const save=async e=>{
@@ -121,7 +121,7 @@ export default function Items({user,folder,role,q,addTick,dests,allowNone=true})
    const {data:references,error:referenceError}=await supabase.from('items').select('id').eq('thumbnail',COVER_PREFIX+oldCoverPath).limit(1)
    if(!referenceError&&!references?.length)await supabase.storage.from(COVER_BUCKET).remove([oldCoverPath])
   }
-  if(saved?.id&&link&&!uploadedCoverPath&&!removeCover&&!storedCoverPath(t)&&AUTO_COVER.includes(p||d.platform)&&(!editId||f.url!==orig.current?.url))fetchCover(saved.id,false)
+  if(saved?.id&&link&&!uploadedCoverPath&&!removeCover&&!storedCoverPath(t)&&AUTO_COVER.includes(d.platform)&&(!editId||f.url!==orig.current?.url))fetchCover(saved.id,false)
   setCoverFile(null);setRemoveCover(false);setSaving(false)
   setF(editId?empty:{...empty,type:f.type});setAdding(false);setEditId(null);load()
  }
@@ -159,7 +159,7 @@ export default function Items({user,folder,role,q,addTick,dests,allowNone=true})
  }
  const actions=i=>[
   i.url&&{k:'open',icon:'out',label:'Abrir original',href:i.url},
-  canEditItem(i)&&i.owner_id===user.id&&i.type==='link'&&AUTO_COVER.includes(i.platform)&&!storedCoverPath(i.thumbnail)&&{k:'autocover',icon:'link',label:'Buscar capa automática',run:()=>fetchCover(i.id,true)},
+  canEditItem(i)&&i.owner_id===user.id&&i.type==='link'&&i.url&&AUTO_COVER.includes(detect(i.url).platform)&&!storedCoverPath(i.thumbnail)&&{k:'autocover',icon:'link',label:'Buscar capa automática',run:()=>fetchCover(i.id,true)},
   canEditItem(i)&&{k:'edit',icon:'edit',label:'Editar',run:()=>openEdit(i)},
   canEdit&&{k:'dup',icon:'dup',label:'Duplicar',run:()=>duplicate(i)},
   canEditItem(i)&&optsFor(i,'move').length>0&&{k:'move',icon:'move',label:'Mover para…',run:()=>setPicker({item:i,mode:'move'})},

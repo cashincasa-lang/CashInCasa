@@ -132,15 +132,24 @@ async function downloadImage(url: string) {
 }
 
 // ---------- função ----------
+// chave secreta: formato antigo (SERVICE_ROLE) ou o novo (SECRET_KEYS, um JSON)
+function secretKey(): string | undefined {
+  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (legacy) return legacy
+  try { return JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}').default as string | undefined } catch { return undefined }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'método' }, 405)
   const url = Deno.env.get('SUPABASE_URL')!
-  const anon = Deno.env.get('SUPABASE_ANON_KEY')!
-  const svc = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const svc = secretKey()
+  if (!url || !svc) return json({ error: 'configuração do servidor' }, 500)
+  const admin = createClient(url, svc)
 
-  const userClient = createClient(url, anon, { global: { headers: { Authorization: req.headers.get('Authorization') || '' } } })
-  const { data: u, error: ue } = await userClient.auth.getUser()
+  // confere o login do usuário (a função não depende da verificação do gateway)
+  const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
+  const { data: u, error: ue } = jwt ? await admin.auth.getUser(jwt) : { data: null, error: new Error('sem token') }
   if (ue || !u?.user) return json({ error: 'não autenticado' }, 401)
 
   let body: { item_id?: unknown }
@@ -148,7 +157,6 @@ Deno.serve(async (req) => {
   const id = body?.item_id
   if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) return json({ error: 'item_id' }, 400)
 
-  const admin = createClient(url, svc)
   const { data: item } = await admin.from('items').select('id,owner_id,type,url,title,thumbnail').eq('id', id).maybeSingle()
   if (!item || item.owner_id !== u.user.id) return json({ error: 'item não encontrado' }, 404)
   if (item.type !== 'link' || !item.url) return json({ ok: false, reason: 'sem_link' })

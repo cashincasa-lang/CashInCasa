@@ -26,6 +26,11 @@ const P = {
   edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
   move: <><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></>,
   dup: <><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></>,
+  up: <path d="m6 15 6-6 6 6"/>,
+  down: <path d="m6 9 6 6 6-6"/>,
+  image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5L5 20"/></>,
+  file: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></>,
+  insta: <><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></>,
   check: <path d="m5 12 5 5 9-10"/>,
 }
 export default function Icon({ n, size = 20, ...p }) {

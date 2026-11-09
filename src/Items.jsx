@@ -23,6 +23,10 @@ export function detect(url){
 const KIND={link:'Link',note:'Nota',prompt:'Prompt',idea:'Ideia'}
 const KICON={link:'link',note:'note',prompt:'prompt',idea:'idea'}
 const PLAT={youtube:'YouTube',tiktok:'TikTok',instagram:'Instagram',kwai:'Kwai',site:'Site'}
+const igInfo=url=>{try{const p=new URL(url).pathname.split('/').filter(Boolean),i=p.findIndex(x=>['p','reel','reels','tv'].includes(x))
+ const kind=i<0?'Perfil':p[i]==='p'?'Post':p[i]==='tv'?'Vídeo':'Reel'
+ const user=i>0?p[0]:(i<0&&p[0]&&!['stories','explore','accounts','direct'].includes(p[0])?p[0]:'')
+ return {kind:i<0&&!user?'Link':kind,user}}catch{return {kind:'',user:''}}}
 const COVER_BUCKET='item-covers',COVER_PREFIX='storage:item-covers/'
 const storedCoverPath=value=>value?.startsWith(COVER_PREFIX)?value.slice(COVER_PREFIX.length):null
 const AUTO_COVER=['site','tiktok','kwai'] // YouTube já tem miniatura própria; Instagram não tem via oficial
@@ -179,14 +183,14 @@ export default function Items({user,folder,role,q,addTick,dests,allowNone=true})
  return <>
   {shown.length===0&&<div className="emptybox"><span className="ic"><Icon n={items.length?'search':'inbox'} size={26}/></span><h2>{items.length?'Nada encontrado':'Sua biblioteca está vazia'}</h2><p>{items.length?'Tente outra palavra, ou busque por uma tag.':'Cole um link de vídeo, escreva uma ideia ou guarde um prompt para começar.'}</p>{!items.length&&canEdit&&<button className="btn btn--primary" onClick={()=>setAdding(true)}><Icon n="plus" size={16}/>Adicionar o primeiro item</button>}</div>}
   <div className="masonry">{shown.map(i=>{
-   const d=i.url?detect(i.url):{},tile=!i.coverDisplay,plat=i.platform&&i.platform!=='site'?(PLAT[i.platform]||i.platform):''
+   const d=i.url?detect(i.url):{},tile=!i.coverDisplay,plat=i.platform&&i.platform!=='site'?(PLAT[i.platform]||i.platform):'',ig=d.platform==='instagram',igi=ig?igInfo(i.url):{}
    return <article className="pin" key={i.id}>
     <button className="pin-media" onClick={()=>{setOpen(i.id);setPlay(false)}} aria-label={'Abrir '+(i.title||KIND[i.type])}>
-     {tile?<div className={'tile tile--'+TILE[i.type]}>
-       <span className="tic"><Icon n={KICON[i.type]} size={18}/></span>
+     {tile?<div className={'tile tile--'+(ig?'insta':TILE[i.type])}>
+       <span className="tic"><Icon n={ig?'insta':KICON[i.type]} size={18}/></span>{ig&&<span className="igtag">Instagram · {igi.kind}</span>}
        {i.title&&<h3>{i.title}</h3>}
        {i.content&&<p>{i.content}</p>}
-       {i.url&&<span className="host">{host(i.url)}</span>}
+       {i.url&&<span className="host">{ig&&igi.user?'@'+igi.user:host(i.url)}</span>}
       </div>:<img src={i.coverDisplay} alt="" loading="lazy"/>}
      {d.embed&&<span className="playbadge"><Icon n="play" size={18}/></span>}
     </button>

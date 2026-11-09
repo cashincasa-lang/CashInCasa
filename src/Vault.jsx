@@ -1,6 +1,7 @@
 import {useEffect,useState,useCallback} from 'react'
 import {supabase,vault} from './supabase'
 import Items from './Items'
+import Cadernos from './Cadernos'
 import Sheet from './Sheet'
 import Icon from './Icon'
 export default function Vault({user,tick,onExit}){
@@ -94,7 +95,7 @@ export default function Vault({user,tick,onExit}){
     {sel&&<><button className="btn btn--ghost btn--sm" onClick={renameF}><Icon n="edit" size={16}/>Renomear</button><button className="btn btn--ghost btn--sm" onClick={dupF}><Icon n="dup" size={16}/>Duplicar pasta</button></>}
     {sel&&<button className="btn btn--ghost btn--sm danger" onClick={delF}><Icon n="trash" size={16}/>Excluir pasta</button>}
    </div>
-   {sel?<Items key={sel.id} user={user} folder={sel} role="owner" q={q} addTick={tick>base?tick-base:0} dests={folders} allowNone={false}/>
+   {sel?<Cadernos key={sel.id} folder={sel} role="owner"><Items key={sel.id} user={user} folder={sel} role="owner" q={q} addTick={tick>base?tick-base:0} dests={folders} allowNone={false}/></Cadernos>
     :<div className="emptybox"><span className="ic"><Icon n="lock" size={26}/></span><h2>Seu cofre está vazio</h2><p>Crie uma pasta secreta para guardar links, ideias e prompts que só aparecem com o PIN.</p><button className="btn btn--primary" onClick={addF}><Icon n="plus" size={16}/>Criar pasta secreta</button></div>}
   </div>
  </>

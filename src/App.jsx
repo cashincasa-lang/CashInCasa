@@ -7,6 +7,7 @@ import Share from './Share'
 import Sheet from './Sheet'
 import Icon from './Icon'
 import Vault from './Vault'
+import Cadernos from './Cadernos'
 export default function App(){
  const [session,setSession]=useState(undefined),[folders,setFolders]=useState([]),[view,setView]=useState('all'),[share,setShare]=useState(false),[profile,setProfile]=useState(false),[q,setQ]=useState(''),[tick,setTick]=useState(0),[vaultOpen,setVaultOpen]=useState(false)
  const searchRef=useRef(null),taps=useRef([])
@@ -75,7 +76,7 @@ export default function App(){
     {cur&&<div className="folderbar">
      {cur.my_role==='owner'?<><button className="btn btn--tonal btn--sm" onClick={()=>setShare(true)}><Icon n="share" size={16}/>Compartilhar</button><button className="btn btn--ghost btn--sm" onClick={()=>renameFolder(cur)}><Icon n="edit" size={16}/>Renomear</button><button className="btn btn--ghost btn--sm" onClick={()=>dupFolder(cur)}><Icon n="dup" size={16}/>Duplicar pasta</button><button className="btn btn--ghost btn--sm danger" onClick={()=>delFolder(cur)}><Icon n="trash" size={16}/>Excluir pasta</button></>:<span className="badge badge--info">Compartilhada por {cur.owner_email} · {cur.my_role==='editor'?'editor':'leitor'}</span>}
     </div>}
-    <Items key={view} user={user} folder={cur||null} role={cur?.my_role} q={q} addTick={tick} dests={folders.filter(f=>f.my_role==='owner'||f.my_role==='editor')}/>
+    {(()=>{const it=<Items key={view} user={user} folder={cur||null} role={cur?.my_role} q={q} addTick={tick} dests={folders.filter(f=>f.my_role==='owner'||f.my_role==='editor')}/>;return cur?<Cadernos key={view} folder={cur} role={cur.my_role}>{it}</Cadernos>:it})()}
     {share&&cur&&<Share folder={cur} onClose={()=>setShare(false)}/>}
    </div>}
   </main>
